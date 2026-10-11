@@ -1,0 +1,306 @@
+import Foundation
+import Observation
+import PDFKit
+import ReaderCore
+
+struct SubPage: Equatable {
+    let page: Int
+    let pages: Int
+}
+
+extension HighlightStore {
+    /// One store for the app; resolves the iCloud container lazily off the main thread.
+    static let shared = HighlightStore(containerIdentifier: "iCloud.com.romadinov.reader")
+}
+
+@MainActor @Observable
+final class ReaderModel {
+    let book: Book
+    let source: PageSource
+    let text: TextProvider
+
+    var currentPage = 0
+    /// Text currently selected in the viewer (PDFKit selection or Live Text selection).
+    var selection = ""
+    /// PDFs show in PDFKit; DjVu and scanned PDFs use the image viewer with Live Text.
+    var imageMode: Bool
+    var ocrProgress: Double?
+    var statusMessage: String?
+
+    let chat = ChatModel()
+
+    /// Position within the current page/chapter (0…1); reflowable books resume from it.
+    var pageProgress: Double = 0
+    @ObservationIgnored var startProgress: Double = 0
+    /// Page within the current chapter (reflowable books in page layout).
+    var subPage: SubPage?
+
+    // Highlights
+    var highlights: [Highlight] = []
+    var tappedHighlight: Highlight?
+    private(set) var highlightLocationDescription = ""
+    @ObservationIgnored private var highlightBook: BookHighlights?
+    @ObservationIgnored private let highlightStore: HighlightStore
+    @ObservationIgnored private var documentID: String?
+
+    /// Set by the active viewer so toolbar controls can navigate.
+    @ObservationIgnored var jumpToPage: ((Int) -> Void)?
+    /// Reflowable viewers supply the text around the visible part of a (possibly very long) chapter.
+    @ObservationIgnored var visibleText: (@MainActor () async -> String?)?
+    /// The viewer turns its current selection into a highlight location (+ the exact text).
+    @ObservationIgnored var captureSelection: (@MainActor () async -> (Highlight.Location, String)?)?
+    @ObservationIgnored var clearSelection: (@MainActor () -> Void)?
+    @ObservationIgnored var revealHighlight: (@MainActor (Highlight) -> Void)?
+    @ObservationIgnored private var ocrTask: Task<Void, Never>?
+    @ObservationIgnored private var lastAskedAbout: (page: Int, selection: String)?
+
+    var pdfDocument: PDFDocument? { (source as? PDFPageSource)?.document }
+    var reflowable: ReflowableSource? { source as? ReflowableSource }
+
+    /// Opening can be slow (EPUB extraction, FB2 conversion, DjVu index), so it runs off the main actor.
+    static func load(book: Book, startPage: Int, startProgress: Double, ocrLanguages: [String],
+                     highlightStore: HighlightStore) async throws -> ReaderModel {
+        let url = book.url
+        let source = try await Task.detached(priority: .userInitiated) { try DocumentOpener.open(url) }.value
+        let model = ReaderModel(book: book, source: source, startPage: startPage, ocrLanguages: ocrLanguages,
+                                highlightStore: highlightStore)
+        model.startProgress = startProgress
+        model.pageProgress = startProgress
+        await model.loadHighlights()
+        return model
+    }
+
+    init(book: Book, source: PageSource, startPage: Int, ocrLanguages: [String], highlightStore: HighlightStore) {
+        self.book = book
+        self.source = source
+        self.highlightStore = highlightStore
+        text = TextProvider(source: source, ocr: OCRService(languages: ocrLanguages))
+        currentPage = min(max(0, startPage), max(0, source.pageCount - 1))
+        imageMode = book.isDjVu || Self.looksScanned(source)
+    }
+
+    /// A PDF whose first pages have no text layer is almost certainly a scan.
+    private static func looksScanned(_ source: PageSource) -> Bool {
+        guard source is PDFPageSource, source.pageCount > 0 else { return false }
+        let probe = (0..<min(3, source.pageCount))
+        return probe.allSatisfy { source.embeddedText(at: $0) == nil }
+    }
+
+    func go(to page: Int) {
+        let page = min(max(0, page), source.pageCount - 1)
+        jumpToPage?(page)
+        currentPage = page
+    }
+
+    // MARK: Highlights
+
+    private func loadHighlights() async {
+        let url = book.url
+        guard let id = try? await Task.detached(priority: .utility, operation: { try DocumentFingerprint.id(for: url) }).value
+        else { return }
+        documentID = id
+        let stored = await highlightStore.load(documentID: id)
+        highlightBook = stored ?? BookHighlights(documentID: id, title: book.title, fileName: book.url.lastPathComponent)
+        highlights = highlightBook?.highlights ?? []
+        highlightLocationDescription = await highlightStore.textFolderDescription
+    }
+
+    /// Highlights the current selection in `color`.
+    func addHighlight(color: Highlight.Color = .yellow) async {
+        guard let captured = await captureSelection?() else {
+            statusMessage = "Couldn't place that highlight — try selecting the text again."
+            return
+        }
+        let highlight = Highlight(text: captured.1, color: color, location: captured.0)
+        highlightBook?.highlights.append(highlight)
+        highlightBook?.highlights.sort(by: { BookHighlights.readingOrderPublic($0, $1) })
+        highlights = highlightBook?.highlights ?? []
+        clearSelection?()
+        selection = ""
+        await persistHighlights()
+    }
+
+    func removeHighlight(_ highlight: Highlight) async {
+        highlightBook?.highlights.removeAll { $0.id == highlight.id }
+        highlightBook?.deleted.insert(highlight.id)
+        highlights = highlightBook?.highlights ?? []
+        await persistHighlights()
+    }
+
+    func recolor(_ highlight: Highlight, to color: Highlight.Color) async {
+        guard let i = highlightBook?.highlights.firstIndex(where: { $0.id == highlight.id }) else { return }
+        // A colour change is a new highlight id so the merge can't resurrect the old colour.
+        var updated = highlight
+        updated.id = UUID()
+        updated.color = color
+        highlightBook?.highlights[i] = updated
+        highlightBook?.deleted.insert(highlight.id)
+        highlights = highlightBook?.highlights ?? []
+        await persistHighlights()
+    }
+
+    func reveal(_ highlight: Highlight) {
+        if let revealHighlight {
+            revealHighlight(highlight)
+        } else {
+            go(to: highlight.location.pageIndex)
+        }
+    }
+
+    func locationLabel(_ location: Highlight.Location) -> String {
+        Self.label(location, chapterTitles: reflowable?.chapterTitles)
+    }
+
+    nonisolated static func label(_ location: Highlight.Location, chapterTitles: [String]?) -> String {
+        switch location {
+        case .pdf(let rects): "p. \((rects.first?.page ?? 0) + 1)"
+        case .image(let page, _): "p. \(page + 1)"
+        case .text(let chapter, _, _, _, _):
+            chapterTitles.flatMap { $0.indices.contains(chapter) ? $0[chapter] : nil } ?? "Chapter \(chapter + 1)"
+        }
+    }
+
+    private func persistHighlights() async {
+        guard let book = highlightBook else { return }
+        let titles = reflowable?.chapterTitles
+        do {
+            let merged = try await highlightStore.save(book) { Self.label($0, chapterTitles: titles) }
+            highlightBook = merged
+            highlights = merged.highlights
+        } catch {
+            statusMessage = "Couldn't save highlights: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: Assistant
+
+    func ask(_ question: String, action: QuickAction? = nil, settings: SettingsStore) {
+        let provider: LLMProvider
+        do { provider = try settings.makeProvider() } catch {
+            chat.error = error.localizedDescription
+            return
+        }
+        let selection = action == .summarize ? "" : self.selection
+        let display = action.map { selection.isEmpty ? $0.title : "\($0.title): “\(selection.prefix(120))”" } ?? question
+        let prompt = action?.question(selection: selection, language: settings.llm.answerLanguage) ?? question
+
+        // Re-send page context when the reader moved or selected something new since the last question.
+        let needsContext = chat.turns.isEmpty || lastAskedAbout?.page != currentPage
+            || (!selection.isEmpty && lastAskedAbout?.selection != selection)
+        lastAskedAbout = (currentPage, selection)
+
+        let page = currentPage
+        let title = book.title
+        let system = ReadingAssistant.systemPrompt(answerLanguage: settings.llm.answerLanguage)
+        let text = self.text
+        let visibleText = self.visibleText
+        chat.send(display: display, provider: provider, system: system) {
+            guard needsContext else { return prompt }
+            let radius = provider.contextCharacterBudget > 20_000 ? 1 : 0
+            var surrounding: String
+            if let visible = await visibleText?(), !visible.isEmpty {
+                surrounding = String(visible.prefix(provider.contextCharacterBudget))
+            } else {
+                surrounding = await text.context(around: page, radius: radius,
+                                                 characterBudget: provider.contextCharacterBudget, allowOCR: true)
+            }
+            let context = ReadingContext(documentTitle: title, pageIndex: page,
+                                         selection: selection.isEmpty ? nil : selection, surroundingText: surrounding)
+            return ReadingAssistant.firstMessage(question: prompt, context: context)
+        }
+    }
+
+    // MARK: OCR
+
+    func recognizeCurrentPage() {
+        let page = currentPage
+        statusMessage = "Recognizing page \(page + 1)…"
+        Task {
+            do {
+                let result = try await text.recognize(page: page)
+                statusMessage = "Page \(page + 1): \(result.plainText.split(whereSeparator: \.isWhitespace).count) words recognized"
+            } catch {
+                statusMessage = "OCR failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// OCRs every page without text so the assistant (and future search) can use the whole book.
+    func recognizeDocument() {
+        ocrTask?.cancel()
+        let total = source.pageCount
+        ocrProgress = 0
+        ocrTask = Task {
+            for page in 0..<total {
+                if Task.isCancelled { break }
+                _ = try? await text.text(page: page, allowOCR: true)
+                ocrProgress = Double(page + 1) / Double(total)
+            }
+            statusMessage = Task.isCancelled ? "Recognition stopped" : "Recognized \(total) pages"
+            ocrProgress = nil
+        }
+    }
+
+    func cancelRecognition() {
+        ocrTask?.cancel()
+        ocrProgress = nil
+    }
+}
+
+@MainActor @Observable
+final class ChatModel {
+    struct Turn: Identifiable {
+        let id = UUID()
+        var role: ChatMessage.Role
+        var display: String
+        var wire: String
+    }
+
+    var turns: [Turn] = []
+    var isStreaming = false
+    var error: String?
+    @ObservationIgnored private var task: Task<Void, Never>?
+
+    func send(display: String, provider: LLMProvider, system: String, buildPrompt: @escaping @MainActor () async -> String) {
+        task?.cancel()
+        error = nil
+        isStreaming = true
+        let user = Turn(role: .user, display: display, wire: display)
+        let reply = Turn(role: .assistant, display: "", wire: "")
+        turns.append(user)
+        turns.append(reply)
+
+        task = Task {
+            let prompt = await buildPrompt()
+            update(user.id) { $0.wire = prompt }
+            let history = turns.prefix { $0.id != reply.id }.map { ChatMessage(role: $0.role, content: $0.wire) }
+            do {
+                for try await delta in provider.stream(system: system, messages: Array(history)) {
+                    update(reply.id) { $0.display += delta }
+                }
+            } catch is CancellationError {
+            } catch {
+                if !Task.isCancelled { self.error = error.localizedDescription }
+            }
+            update(reply.id) { $0.wire = $0.display }
+            turns.removeAll { $0.id == reply.id && $0.display.isEmpty }
+            if !Task.isCancelled { isStreaming = false }
+        }
+    }
+
+    /// Turns may be cleared while a reply streams, so address them by id, not index.
+    private func update(_ id: UUID, _ change: (inout Turn) -> Void) {
+        if let i = turns.firstIndex(where: { $0.id == id }) { change(&turns[i]) }
+    }
+
+    func stop() {
+        task?.cancel()
+        isStreaming = false
+    }
+
+    func clear() {
+        stop()
+        turns = []
+        error = nil
+    }
+}

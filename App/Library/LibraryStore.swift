@@ -1,0 +1,249 @@
+import Foundation
+import Observation
+import ReaderCore
+import UniformTypeIdentifiers
+
+struct Book: Identifiable, Hashable {
+    var url: URL
+    var id: URL { url }
+
+    var title: String {
+        let name = url.lastPathComponent
+        if name.lowercased().hasSuffix(".fb2.zip") { return String(name.dropLast(8)) }
+        return url.deletingPathExtension().lastPathComponent
+    }
+
+    var format: String {
+        url.lastPathComponent.lowercased().hasSuffix(".fb2.zip") ? "FB2" : url.pathExtension.uppercased()
+    }
+
+    var isDjVu: Bool { ["djvu", "djv"].contains(url.pathExtension.lowercased()) }
+}
+
+struct Folder: Identifiable, Hashable {
+    var url: URL
+    var id: URL { url }
+    var name: String { url.lastPathComponent }
+}
+
+enum LibraryRoute: Hashable {
+    case folder(Folder)
+    case book(Book)
+}
+
+extension UTType {
+    static let djvu = UTType(importedAs: "org.djvu.djvu")
+    static let fb2 = UTType(importedAs: "org.gribuser.fb2")
+}
+
+/// Books live in Documents/Books, organised in folders (also visible in the Files app).
+/// Reading positions are stored in UserDefaults, keyed by path relative to the library root.
+@MainActor @Observable
+final class LibraryStore {
+    var path: [LibraryRoute] = []
+    /// Bumped whenever files change, so folder views reload.
+    private(set) var revision = 0
+
+    let root: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appending(path: "Books")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.standardizedFileURL
+    }()
+
+    var rootFolder: Folder { Folder(url: root) }
+
+    // MARK: iCloud Inbox
+
+    /// iCloud Drive › Scriptorium › Inbox (or On My iPad › Scriptorium › Inbox without iCloud).
+    private(set) var inbox: InboxSync?
+    private(set) var inboxLocation = ""
+    private(set) var isSyncingInbox = false
+
+    init() {
+        Task { await resolveInbox() }
+    }
+
+    private func resolveInbox() async {
+        let root = root
+        let (url, isCloud) = await Task.detached(priority: .utility) { () -> (URL, Bool) in
+            if let documents = ICloudFiles.documentsDirectory(containerIdentifier: "iCloud.com.romadinov.reader") {
+                return (documents.appending(path: "Inbox"), true)
+            }
+            let local = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            return (local.appending(path: "Inbox"), false)
+        }.value
+        let sync = InboxSync(library: root, inbox: url)
+        inbox = sync
+        inboxLocation = isCloud ? "iCloud Drive › Scriptorium › Inbox" : "On My iPad › Scriptorium › Inbox"
+        await Task.detached(priority: .utility) { _ = try? sync.mirrorFolders() }.value
+    }
+
+    /// Imports everything waiting in the Inbox into the matching library folders and empties the Inbox.
+    func syncInbox() async -> InboxSync.Report? {
+        if inbox == nil { await resolveInbox() }
+        guard let inbox, !isSyncingInbox else { return nil }
+        isSyncingInbox = true
+        defer { isSyncingInbox = false }
+        let report = await Task.detached(priority: .userInitiated) { await inbox.sync() }.value
+        reload()
+        return report
+    }
+
+    private func mirrorInboxFolders() {
+        guard let inbox else { return }
+        Task.detached(priority: .utility) { _ = try? inbox.mirrorFolders() }
+    }
+
+    func reload() { revision += 1 }
+
+    func contents(of folder: Folder) -> (folders: [Folder], books: [Book]) {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: folder.url, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)) ?? []
+        var folders: [Folder] = [], books: [Book] = []
+        for url in urls {
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                folders.append(Folder(url: url))
+            } else if DocumentOpener.canOpen(url) {
+                books.append(Book(url: url))
+            }
+        }
+        return (folders.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
+                books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
+    }
+
+    /// Every folder in the library, depth-first, for the "Move to…" picker.
+    func allFolders() -> [(folder: Folder, depth: Int)] {
+        func walk(_ folder: Folder, depth: Int) -> [(Folder, Int)] {
+            [(folder, depth)] + contents(of: folder).folders.flatMap { walk($0, depth: depth + 1) }
+        }
+        return walk(rootFolder, depth: 0)
+    }
+
+    // MARK: Changes
+
+    /// Copies picked/shared files into `folder` (the library root by default).
+    @discardableResult
+    func importFiles(_ urls: [URL], into folder: Folder? = nil) -> [Book] {
+        let target = folder?.url ?? root
+        var imported: [Book] = []
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard DocumentOpener.canOpen(url) else { continue }
+            if url.standardizedFileURL.path.hasPrefix(root.path + "/") {
+                imported.append(Book(url: url))
+                continue
+            }
+            let destination = LibraryFiles.uniqueURL(for: url.lastPathComponent, in: target)
+            do {
+                try FileManager.default.copyItem(at: url, to: destination)
+                imported.append(Book(url: destination))
+                // "Open with…" from another app lands a copy in Documents/Inbox; don't keep a duplicate.
+                if url.deletingLastPathComponent().lastPathComponent == "Inbox" { try? FileManager.default.removeItem(at: url) }
+            } catch {
+                NSLog("Import failed for %@: %@", url.path, error.localizedDescription)
+            }
+        }
+        reload()
+        return imported
+    }
+
+    func createFolder(named name: String, in parent: Folder) throws {
+        let name = try Self.validName(name)
+        try FileManager.default.createDirectory(at: parent.url.appending(path: name), withIntermediateDirectories: false)
+        mirrorInboxFolders()
+        reload()
+    }
+
+    func rename(_ url: URL, to newName: String) throws {
+        var name = try Self.validName(newName)
+        // Books keep their extension even if the user types only a title.
+        if !isDirectory(url) {
+            let book = Book(url: url)
+            let ext = book.format == "FB2" && url.pathExtension.lowercased() == "zip" ? "fb2.zip" : url.pathExtension
+            if !name.lowercased().hasSuffix("." + ext.lowercased()) { name += "." + ext }
+        }
+        let target = url.deletingLastPathComponent().appending(path: name)
+        guard target != url else { return }
+        let wasFolder = isDirectory(url), oldPath = relativePath(url)
+        try FileManager.default.moveItem(at: url, to: target)
+        movePositions(from: url, to: target)
+        if wasFolder { inbox?.mirrorMove(from: oldPath, to: relativePath(target)) }
+        reload()
+    }
+
+    func move(_ url: URL, to folder: Folder) throws {
+        guard folder.url != url, !folder.url.path.hasPrefix(url.path + "/") else { return }
+        let target = LibraryFiles.uniqueURL(for: url.lastPathComponent, in: folder.url)
+        let wasFolder = isDirectory(url), oldPath = relativePath(url)
+        try FileManager.default.moveItem(at: url, to: target)
+        movePositions(from: url, to: target)
+        if wasFolder { inbox?.mirrorMove(from: oldPath, to: relativePath(target)) }
+        reload()
+    }
+
+    func delete(_ url: URL) {
+        if isDirectory(url) { inbox?.mirrorDelete(relativePath(url)) }
+        try? FileManager.default.removeItem(at: url)
+        let prefix = relativePath(url)
+        for key in UserDefaults.standard.dictionaryRepresentation().keys
+        where key.hasPrefix("page:\(prefix)") || key.hasPrefix("progress:\(prefix)") {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        reload()
+    }
+
+    func open(_ book: Book) { path.append(.book(book)) }
+
+    // MARK: Reading position
+
+    func lastPage(_ book: Book) -> Int {
+        UserDefaults.standard.integer(forKey: "page:\(relativePath(book.url))")
+    }
+
+    func setLastPage(_ page: Int, for book: Book) {
+        UserDefaults.standard.set(page, forKey: "page:\(relativePath(book.url))")
+    }
+
+    /// Position inside the page/chapter (0…1), for reflowable books.
+    func lastProgress(_ book: Book) -> Double {
+        UserDefaults.standard.double(forKey: "progress:\(relativePath(book.url))")
+    }
+
+    func setLastProgress(_ progress: Double, for book: Book) {
+        UserDefaults.standard.set(progress, forKey: "progress:\(relativePath(book.url))")
+    }
+
+    // MARK: Helpers
+
+    func relativePath(_ url: URL) -> String {
+        let path = url.standardizedFileURL.path
+        return path.hasPrefix(root.path + "/") ? String(path.dropFirst(root.path.count + 1)) : url.lastPathComponent
+    }
+
+    func isDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
+    /// Positions are keyed by relative path, so carry them over (for a folder: everything inside it).
+    private func movePositions(from old: URL, to new: URL) {
+        let oldPath = relativePath(old), newPath = relativePath(new)
+        let defaults = UserDefaults.standard
+        for (key, value) in defaults.dictionaryRepresentation() {
+            for kind in ["page:", "progress:"] {
+                guard key == kind + oldPath || key.hasPrefix(kind + oldPath + "/") else { continue }
+                defaults.set(value, forKey: kind + newPath + key.dropFirst((kind + oldPath).count))
+                defaults.removeObject(forKey: key)
+            }
+        }
+    }
+
+    private static func validName(_ name: String) throws -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("/"), !trimmed.hasPrefix(".") else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        return trimmed
+    }
+}

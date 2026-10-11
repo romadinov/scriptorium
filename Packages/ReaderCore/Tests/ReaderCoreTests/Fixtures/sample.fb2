@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+<description><title-info><book-title>Тепло и порядок</book-title><coverpage><image l:href="#cover.png"/></coverpage><lang>ru</lang></title-info></description>
+<body><title><p>Тепло и порядок</p></title>
+<section><title><p>Глава первая</p></title><p>Энтропия <emphasis>не убывает</emphasis><a l:href="#n1" type="note">1</a>.</p>
+ <section><title><p>Больцман</p></title><p>S = k log W</p></section></section>
+<section><title><p>Глава вторая</p></title><poem><stanza><v>Строка один</v><v>Строка два</v></stanza></poem><image l:href="#cover.png"/></section>
+</body>
+<body name="notes"><title><p>Примечания</p></title><section id="n1"><p>Во втором начале.</p></section></body>
+<binary id="cover.png" content-type="image/png">iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==</binary>
+</FictionBook>

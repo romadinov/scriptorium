@@ -1,0 +1,111 @@
+name: Reader
+options:
+  bundleIdPrefix: com.romadinov
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  ReaderCore:
+    path: Packages/ReaderCore
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: SZVSSCJQFN   # Alexey Romadinov (Individual)
+
+targets:
+  Reader:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: ReaderCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.romadinov.reader
+        TARGETED_DEVICE_FAMILY: "2"
+        INFOPLIST_KEY_CFBundleDisplayName: Scriptorium
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: App/Scriptorium.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Scriptorium
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # Library folder is visible in the Files app.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        # Local LLM servers (Ollama / LM Studio) are usually plain HTTP on the LAN.
+        NSLocalNetworkUsageDescription: Connect to a language model running on your computer.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: PDF Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+          - CFBundleTypeName: DjVu Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes: [org.djvu.djvu]
+          - CFBundleTypeName: EPUB Book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.idpf.epub-container]
+          - CFBundleTypeName: FictionBook
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes: [org.gribuser.fb2]
+        # Highlights sync through iCloud Drive; the readable copies appear as iCloud Drive › Scriptorium.
+        NSUbiquitousContainers:
+          iCloud.com.romadinov.reader:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: Scriptorium
+            NSUbiquitousContainerSupportedFolderLevels: Any
+        # Wi-Fi Transfer advertises itself over Bonjour.
+        NSBonjourServices: [_http._tcp]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.djvu.djvu
+            UTTypeDescription: DjVu Document
+            UTTypeConformsTo: [public.data, public.image]
+            UTTypeTagSpecification:
+              public.filename-extension: [djvu, djv]
+              public.mime-type: [image/vnd.djvu, image/x-djvu]
+          - UTTypeIdentifier: org.gribuser.fb2
+            UTTypeDescription: FictionBook
+            UTTypeConformsTo: [public.xml, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [fb2]
+              public.mime-type: [application/x-fictionbook+xml]
+
+  ReaderUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Reader
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.romadinov.reader.uitests
+        TARGETED_DEVICE_FAMILY: "2"
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+
+schemes:
+  Reader:
+    build:
+      targets:
+        Reader: all
+        ReaderUITests: [test]
+    test:
+      targets: [ReaderUITests]
