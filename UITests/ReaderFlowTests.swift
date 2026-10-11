@@ -48,6 +48,12 @@ final class ReaderFlowTests: XCTestCase {
         explain.tap()
         waitForAnswer()
         snap("pdf-3-answer")
+
+        let close = app.buttons["assistant.close"]
+        XCTAssertTrue(close.exists, "Assistant has no close button")
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5), "Assistant did not close")
+        snap("pdf-4-closed")
     }
 
     func testScannedPDFOpensInLiveTextMode() throws {

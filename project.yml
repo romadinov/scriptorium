@@ -31,7 +31,7 @@ targets:
         MARKETING_VERSION: "1.0"
         # Raise for every install (scripts/bump-build.sh): iCloud only re-reads NSUbiquitousContainers
         # (the "Scriptorium" folder in iCloud Drive) when the build number changes.
-        CURRENT_PROJECT_VERSION: "8"
+        CURRENT_PROJECT_VERSION: "9"
         CODE_SIGN_ENTITLEMENTS: App/Scriptorium.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:

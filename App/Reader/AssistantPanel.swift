@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AssistantPanel: View {
     @Bindable var model: ReaderModel
+    var onClose: () -> Void = {}
     @Environment(SettingsStore.self) private var settings
     @State private var input = ""
     @FocusState private var inputFocused: Bool
@@ -40,6 +41,12 @@ struct AssistantPanel: View {
             Button("New chat", systemImage: "square.and.pencil") { chat.clear() }
                 .labelStyle(.iconOnly)
                 .disabled(chat.turns.isEmpty)
+            Button("Close Assistant", systemImage: "xmark") {
+                chat.stop()
+                onClose()
+            }
+            .labelStyle(.iconOnly)
+            .accessibilityIdentifier("assistant.close")
         }
         .padding()
     }

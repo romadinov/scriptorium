@@ -199,12 +199,23 @@ final class ReaderModel {
         }
     }
 
-    /// Page text with line breaks turned into spaces (same length, so offsets stay valid for PDF selections).
+    /// Page text without running headers/footers, line breaks turned into spaces. Both keep the
+    /// length, so offsets stay valid for PDF selections and the spoken-sentence highlight.
     func speechText(page: Int) async -> String? {
-        if let pdf = pdfDocument?.page(at: page)?.string, !imageMode {
-            return pdf.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
+        let raw: String
+        let neighbours: [String]
+        if let pdf = pdfDocument, let string = pdf.page(at: page)?.string, !imageMode {
+            raw = string
+            neighbours = [page - 2, page - 1, page + 1, page + 2]
+                .filter { $0 >= 0 && $0 < pdf.pageCount }
+                .compactMap { pdf.page(at: $0)?.string }
+        } else {
+            guard let ocr = try? await text.text(page: page, allowOCR: true)?.plainText else { return nil }
+            raw = ocr
+            neighbours = await text.neighbourTexts(of: page)
         }
-        return try? await text.text(page: page, allowOCR: true)?.plainText.replacingOccurrences(of: "\n", with: " ")
+        return RunningHeaders.blanked(raw, neighbours: neighbours)
+            .replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
     }
 
     // MARK: Read Later
@@ -551,6 +562,11 @@ final class ChatModel {
             do {
                 for try await delta in provider.stream(system: system, messages: Array(history)) {
                     update(reply.id) { $0.display += delta }
+                    // Small models sometimes repeat one sentence forever; cut the loop off.
+                    if let text = turns.first(where: { $0.id == reply.id })?.display, RepetitionGuard.isLooping(text) {
+                        update(reply.id) { $0.display = RepetitionGuard.trimmed($0.display) }
+                        break
+                    }
                 }
             } catch is CancellationError {
             } catch {

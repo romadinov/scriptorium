@@ -139,7 +139,7 @@ private struct ReaderContent: View {
             })
         }
         .inspector(isPresented: $showAssistant) {
-            AssistantPanel(model: model)
+            AssistantPanel(model: model, onClose: { showAssistant = false })
                 .inspectorColumnWidth(min: 320, ideal: 420, max: 600)
         }
         .sheet(item: $dictionaryTerm) { term in

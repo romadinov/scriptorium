@@ -56,7 +56,8 @@ public actor TextProvider {
         var parts: [String] = []
         let range = max(0, page - radius)...min(source.pageCount - 1, page + radius)
         for index in range {
-            let text = (try? await text(page: index, allowOCR: allowOCR && index == page))??.plainText ?? ""
+            guard let raw = (try? await text(page: index, allowOCR: allowOCR && index == page))??.plainText else { continue }
+            let text = RunningHeaders.stripped(raw, neighbours: await neighbourTexts(of: index))
             if !text.isEmpty { parts.append("[Page \(index + 1)]\n\(text)") }
         }
         let joined = parts.joined(separator: "\n\n")
@@ -68,6 +69,15 @@ public actor TextProvider {
         let from = joined.index(joined.startIndex, offsetBy: start)
         let to = joined.index(from, offsetBy: characterBudget)
         return "…" + joined[from..<to] + "…"
+    }
+
+    /// Text of the pages around `page` (±2, no OCR) — what running headers are recognised against.
+    public func neighbourTexts(of page: Int) async -> [String] {
+        var result: [String] = []
+        for index in [page - 2, page - 1, page + 1, page + 2] where index >= 0 && index < source.pageCount {
+            if let t = (try? await text(page: index, allowOCR: false))??.plainText, !t.isEmpty { result.append(t) }
+        }
+        return result
     }
 
     private func cacheFile(_ page: Int) -> URL {

@@ -37,7 +37,8 @@ public struct AppleOnDeviceProvider: LLMProvider {
                     let prompt = Self.flatten(messages)
                     var emitted = ""
                     // Low temperature: reading questions want faithful answers, not creative ones.
-                    let options = GenerationOptions(temperature: 0.2)
+                    // A response cap stops a runaway (looping) answer from filling the context window.
+                    let options = GenerationOptions(temperature: 0.2, maximumResponseTokens: 700)
                     for try await snapshot in session.streamResponse(to: prompt, options: options) {
                         let full = snapshot.content
                         if full.hasPrefix(emitted) {
