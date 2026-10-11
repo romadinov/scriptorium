@@ -35,6 +35,13 @@ final class ReaderModel {
     var statusMessage: String?
 
     let chat = ChatModel()
+    let readAloud = ReadAloud()
+
+    /// Next paragraphs to read aloud as (text, anchor); `restart` = from the current position. Empty = end.
+    @ObservationIgnored var speechParagraphs: (@MainActor (_ restart: Bool) async -> [(text: String, anchor: Int)])?
+    /// Show the range being spoken (anchor from `speechParagraphs`); nil range clears.
+    @ObservationIgnored var speechHighlight: (@MainActor (_ anchor: Int, _ range: NSRange?) -> Void)?
+    @ObservationIgnored private var speechPage = 0
 
     /// Position within the current page/chapter (0…1); reflowable books resume from it.
     var pageProgress: Double = 0
@@ -144,6 +151,7 @@ final class ReaderModel {
         text = TextProvider(source: source, ocr: OCRService(languages: ocrLanguages))
         currentPage = min(max(0, startPage), max(0, source.pageCount - 1))
         imageMode = book.isDjVu || Self.looksScanned(source)
+        installFixedLayoutSpeech()
     }
 
     /// A PDF whose first pages have no text layer is almost certainly a scan.
@@ -159,6 +167,38 @@ final class ReaderModel {
         if remember { pushCurrentPosition() }
         jumpToPage?(page)
         currentPage = page
+    }
+
+    // MARK: Read aloud (fixed layout)
+
+    /// PDF/DjVu/scans read page by page. The anchor is the page; ranges are into that page's text.
+    /// Reflowable viewers replace both closures with their own.
+    private func installFixedLayoutSpeech() {
+        guard reflowable == nil else { return }
+        speechParagraphs = { [weak self] restart in
+            guard let self else { return [] }
+            if restart { speechPage = currentPage } else { speechPage += 1 }
+            while speechPage < source.pageCount {
+                if let text = await speechText(page: speechPage), text.rangeOfCharacter(from: .letters) != nil {
+                    return [(text, speechPage)]
+                }
+                speechPage += 1   // blank page: skip
+            }
+            return []
+        }
+        speechHighlight = { [weak self] page, _ in
+            guard let self, page >= 0, page != currentPage else { return }
+            jumpToPage?(page)
+            currentPage = page
+        }
+    }
+
+    /// Page text with line breaks turned into spaces (same length, so offsets stay valid for PDF selections).
+    func speechText(page: Int) async -> String? {
+        if let pdf = pdfDocument?.page(at: page)?.string, !imageMode {
+            return pdf.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
+        }
+        return try? await text.text(page: page, allowOCR: true)?.plainText.replacingOccurrences(of: "\n", with: " ")
     }
 
     // MARK: Read Later

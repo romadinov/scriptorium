@@ -118,6 +118,23 @@ struct ReflowableView: UIViewRepresentable {
                 try? await self?.webView?.evaluateJavaScript("reader.visibleText()") as? String
             }
             model.captureSelection = { [weak self] in await self?.captureSelection() }
+            model.speechParagraphs = { [weak self] restart in
+                guard let self, let webView = self.webView,
+                      let result = try? await webView.callAsyncJavaScript("return reader.speechParagraphs(r, 20)",
+                                                                          arguments: ["r": restart], contentWorld: .page),
+                      let items = result as? [[String: Any]] else { return [] }
+                return items.compactMap { item in
+                    guard let id = (item["id"] as? NSNumber)?.intValue, let text = item["text"] as? String else { return nil }
+                    return (text, id)
+                }
+            }
+            model.speechHighlight = { [weak self] id, range in
+                if let range {
+                    self?.call("reader.speechHighlight(i, s, l)", ["i": id, "s": range.location, "l": range.length])
+                } else {
+                    self?.call("reader.speechClear()")
+                }
+            }
             model.clearSelection = { [weak self] in self?.call("reader.clearSelection()") }
             model.revealHighlight = { [weak self] highlight in
                 guard let self, case .text(let chapter, _, _, _, _) = highlight.location else { return }
@@ -131,6 +148,8 @@ struct ReflowableView: UIViewRepresentable {
         func uninstall() {
             model.jumpToPage = nil
             model.jumpToPosition = nil
+            model.speechParagraphs = nil
+            model.speechHighlight = nil
             model.visibleText = nil
             model.captureSelection = nil
             model.clearSelection = nil
@@ -336,6 +355,8 @@ struct ReflowableView: UIViewRepresentable {
         :root { color-scheme: light dark; --scale: 1; --cols: 1; --ph: 44px; --pv: 40px;
                 --bg: #fffdf8; --fg: #1d1b18; --link: #2f5fb3; }
         @media (prefers-color-scheme: dark) { :root { --bg: #1c1b1a; --fg: #e9e5dc; --link: #8fb4ff; } }
+        @media (max-width: 560px) { :root { --ph: 20px; --pv: 22px; } html { font-size: calc(18px * var(--scale)) !important; }
+                                    html.scroll .rchap { padding: 18px 18px 8px; } }
         html { -webkit-text-size-adjust: none; font-size: calc(20px * var(--scale)) !important; background: var(--bg) !important; }
         body { margin: 0 !important; padding: 0 !important; max-width: none !important; background: var(--bg) !important;
                color: var(--fg) !important; font-family: -apple-system-ui-serif, ui-serif, Georgia, serif; line-height: 1.55;
@@ -352,6 +373,7 @@ struct ReflowableView: UIViewRepresentable {
         .rchap .author { text-align: right; font-style: italic; } .rchap p.image { text-align: center; }
         .rchap sup { font-size: 0.7em !important; }
         mark.rhl { background: var(--hl); color: inherit; border-radius: 2px; }
+        ::highlight(speech) { background-color: rgba(70, 130, 255, 0.28); }
 
         html.paged { height: 100vh; overflow-y: hidden; }
         html.paged body { height: 100vh; column-width: calc(100vw / var(--cols)); column-gap: 0; column-fill: auto; }

@@ -41,6 +41,7 @@ private struct FolderView: View {
     @State private var showReadLater = false
     @State private var showNotes = false
     @State private var query = ""
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @AppStorage("libraryLayout") private var layout: LibraryLayout = .list
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 24)]
@@ -103,26 +104,27 @@ private struct FolderView: View {
         .refreshable { await syncInbox() }
         .task(id: library.revision) { reload() }
         .toolbar {
-            ToolbarItemGroup(placement: .topBarLeading) {
-                if isRoot {
-                    Button("Settings", systemImage: "gearshape") { showSettings = true }
+            if sizeClass == .compact {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if library.isSyncingInbox { ProgressView() }
+                    Button("Import", systemImage: "plus") { importing = true }
+                    Menu("More", systemImage: "ellipsis.circle") {
+                        Button("Sync iCloud Inbox", systemImage: "icloud.and.arrow.down") { Task { await syncInbox() } }
+                        Button("Bookmarks", systemImage: "bookmark") { showNotes = true }
+                        Button("Read Later", systemImage: "text.badge.plus") { showReadLater = true }
+                        Divider()
+                        Button("New Folder", systemImage: "folder.badge.plus") { naming = .newFolder }
+                        Button("Wi-Fi Transfer", systemImage: "wifi") { showTransfer = true }
+                        Button(layout == .list ? "Show as grid" : "Show as list",
+                               systemImage: layout == .list ? "square.grid.2x2" : "list.bullet") {
+                            layout = layout == .list ? .grid : .list
+                        }
+                        Divider()
+                        Button("Settings", systemImage: "gearshape") { showSettings = true }
+                    }
                 }
-                Button(layout == .list ? "Show as grid" : "Show as list",
-                       systemImage: layout == .list ? "square.grid.2x2" : "list.bullet") {
-                    layout = layout == .list ? .grid : .list
-                }
-                Button("Read Later", systemImage: "text.badge.plus") { showReadLater = true }
-                Button("Bookmarks", systemImage: "bookmark") { showNotes = true }
-            }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if library.isSyncingInbox {
-                    ProgressView()
-                } else {
-                    Button("Sync iCloud Inbox", systemImage: "icloud.and.arrow.down") { Task { await syncInbox() } }
-                }
-                Button("Wi-Fi Transfer", systemImage: "wifi") { showTransfer = true }
-                Button("New Folder", systemImage: "folder.badge.plus") { naming = .newFolder }
-                Button("Import", systemImage: "plus") { importing = true }
+            } else {
+                regularToolbar
             }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .djvu, .epub, .fb2, .zip, .webArchive, .chm],
@@ -167,6 +169,32 @@ private struct FolderView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+    }
+
+    @ToolbarContentBuilder
+    private var regularToolbar: some ToolbarContent {
+            ToolbarItemGroup(placement: .topBarLeading) {
+                if isRoot {
+                    Button("Settings", systemImage: "gearshape") { showSettings = true }
+                }
+                Button(layout == .list ? "Show as grid" : "Show as list",
+                       systemImage: layout == .list ? "square.grid.2x2" : "list.bullet") {
+                    layout = layout == .list ? .grid : .list
+                }
+                Button("Read Later", systemImage: "text.badge.plus") { showReadLater = true }
+                Button("Bookmarks", systemImage: "bookmark") { showNotes = true }
+            }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if library.isSyncingInbox {
+                    ProgressView()
+                } else {
+                    Button("Sync iCloud Inbox", systemImage: "icloud.and.arrow.down") { Task { await syncInbox() } }
+                }
+                Button("Wi-Fi Transfer", systemImage: "wifi") { showTransfer = true }
+                Button("New Folder", systemImage: "folder.badge.plus") { naming = .newFolder }
+                Button("Import", systemImage: "plus") { importing = true }
+            }
+        
     }
 
     @ViewBuilder

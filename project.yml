@@ -24,14 +24,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.romadinov.reader
-        TARGETED_DEVICE_FAMILY: "2"
+        TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: Scriptorium
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "1.0"
         # Raise for every install (scripts/bump-build.sh): iCloud only re-reads NSUbiquitousContainers
         # (the "Scriptorium" folder in iCloud Drive) when the build number changes.
-        CURRENT_PROJECT_VERSION: "3"
+        CURRENT_PROJECT_VERSION: "4"
         CODE_SIGN_ENTITLEMENTS: App/Scriptorium.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -42,6 +42,10 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations~iphone:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
@@ -91,7 +95,7 @@ targets:
           - CFBundleURLName: com.romadinov.reader.open
             CFBundleURLSchemes: [scriptorium]
         # Background import from the iCloud Inbox.
-        UIBackgroundModes: [fetch, processing]
+        UIBackgroundModes: [fetch, processing, audio]
         BGTaskSchedulerPermittedIdentifiers:
           - com.romadinov.reader.inbox.refresh
           - com.romadinov.reader.inbox.import
@@ -126,7 +130,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.romadinov.reader.uitests
-        TARGETED_DEVICE_FAMILY: "2"
+        TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "6.0"
 

@@ -22,6 +22,7 @@
 		88093EAF0CCD5B0D5A196515 /* TransferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 094B5AE862D1C5DED8DD2321 /* TransferView.swift */; };
 		98C58A397921DDBA2F8D68DE /* PDFKitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F99F1B3375B9DD7B88E1C3A8 /* PDFKitView.swift */; };
 		A3380EA9A4BD8E7D4C59652D /* PagedImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D898DB03683B4C2A2A7A7D /* PagedImageView.swift */; };
+		A6B1A96CE5F461CA9136E455 /* ReadAloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EF6C34659EAE99694BF514 /* ReadAloud.swift */; };
 		A6E2A29AD3656CC4B3B146C2 /* ReaderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D50ED6D61D0776BC7B432C9 /* ReaderModel.swift */; };
 		B6239842E4B6C50E3BC038A6 /* ReaderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1B699B6763846BB7FEBB14 /* ReaderScreen.swift */; };
 		F724DA519FFC3D85D1BE9716 /* ReflowableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1780E587DDBB8C98CC62E2D9 /* ReflowableView.swift */; };
@@ -51,6 +52,7 @@
 		8A3DE3BEBAA5AC8F83EA1617 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8AD8F32EB58A2CD39C018AD3 /* InboxAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxAutomation.swift; sourceTree = "<group>"; };
 		90E92515944A1F81D5718504 /* ReaderFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderFlowTests.swift; sourceTree = "<group>"; };
+		90EF6C34659EAE99694BF514 /* ReadAloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAloud.swift; sourceTree = "<group>"; };
 		91665D257827EDB0F9C72846 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C0063B8777CB5A098250F91B /* ReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderApp.swift; sourceTree = "<group>"; };
 		D2B2A2361D253EFE3731B80B /* ReflowEngine.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = ReflowEngine.js; sourceTree = "<group>"; };
@@ -101,6 +103,7 @@
 				F5D898DB03683B4C2A2A7A7D /* PagedImageView.swift */,
 				DE6CE1A6FE443F5FC467FDAB /* Paginator.swift */,
 				F99F1B3375B9DD7B88E1C3A8 /* PDFKitView.swift */,
+				90EF6C34659EAE99694BF514 /* ReadAloud.swift */,
 				7D50ED6D61D0776BC7B432C9 /* ReaderModel.swift */,
 				EB1B699B6763846BB7FEBB14 /* ReaderScreen.swift */,
 				1780E587DDBB8C98CC62E2D9 /* ReflowableView.swift */,
@@ -269,6 +272,7 @@
 				98C58A397921DDBA2F8D68DE /* PDFKitView.swift in Sources */,
 				A3380EA9A4BD8E7D4C59652D /* PagedImageView.swift in Sources */,
 				085B00737CE1188AA99DC333 /* Paginator.swift in Sources */,
+				A6B1A96CE5F461CA9136E455 /* ReadAloud.swift in Sources */,
 				4CB6BD43E27066EC0E98DBF4 /* ReaderApp.swift in Sources */,
 				A6E2A29AD3656CC4B3B146C2 /* ReaderModel.swift in Sources */,
 				B6239842E4B6C50E3BC038A6 /* ReaderScreen.swift in Sources */,
@@ -311,7 +315,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.romadinov.reader.uitests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Reader;
 			};
 			name = Release;
@@ -393,7 +397,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.romadinov.reader.uitests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Reader;
 			};
 			name = Debug;
@@ -462,7 +466,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;
@@ -473,7 +477,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.romadinov.reader;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -484,7 +488,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;
@@ -495,7 +499,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.romadinov.reader;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};

@@ -62,6 +62,10 @@ private struct ReaderContent: View {
     @AppStorage("reflowLayout") private var layout: ReflowLayout = .paged
     @AppStorage("pageTurning") private var turning: PageTurning = .horizontal
     @State private var showHighlights = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// iPhone (and narrow iPad split view): fewer toolbar buttons, panels as sheets.
+    private var compact: Bool { sizeClass == .compact }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -75,6 +79,9 @@ private struct ReaderContent: View {
                 }
                 if let progress = model.ocrProgress {
                     OCRProgressPill(progress: progress) { model.cancelRecognition() }
+                }
+                if model.readAloud.state != .idle {
+                    ReadAloudBar(readAloud: model.readAloud)
                 }
                 if !model.selection.isEmpty {
                     SelectionBar(
@@ -102,9 +109,33 @@ private struct ReaderContent: View {
             }
         }
         .animation(.snappy, value: model.backStack.count)
+        .onDisappear { model.readAloud.stop() }
         .navigationTitle(model.book.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { toolbar }
+        .toolbar {
+            if compact { compactToolbar } else { toolbar }
+        }
+        .sheet(isPresented: compactOnly($showOutline)) {
+            NavigationStack {
+                OutlineView(items: model.source.outline) { page in
+                    model.go(to: page)
+                    showOutline = false
+                }
+                .navigationTitle("Contents").navigationBarTitleDisplayMode(.inline)
+            }
+        }
+        .sheet(isPresented: compactOnly($showPagePicker)) {
+            PagePicker(model: model).padding().presentationDetents([.height(260)])
+        }
+        .sheet(isPresented: compactOnly($showHighlights)) {
+            HighlightsList(model: model, onSelect: { highlight in
+                showHighlights = false
+                model.reveal(highlight)
+            }, onSelectBookmark: { bookmark in
+                showHighlights = false
+                model.open(bookmark)
+            })
+        }
         .inspector(isPresented: $showAssistant) {
             AssistantPanel(model: model)
                 .inspectorColumnWidth(min: 320, ideal: 420, max: 600)
@@ -209,6 +240,10 @@ private struct ReaderContent: View {
                    systemImage: model.currentBookmark == nil ? "bookmark" : "bookmark.fill") {
                 Task { await model.toggleBookmark() }
             }
+            Button(model.readAloud.state == .idle ? "Read aloud" : "Stop reading aloud",
+                   systemImage: model.readAloud.state == .idle ? "speaker.wave.2" : "speaker.slash") {
+                if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
+            }
             Button("Highlights", systemImage: "highlighter") { showHighlights = true }
                 .popover(isPresented: $showHighlights) {
                     HighlightsList(model: model, onSelect: { highlight in
@@ -221,6 +256,67 @@ private struct ReaderContent: View {
                     .frame(minWidth: 360, minHeight: 440)
                 }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
+        }
+    }
+
+    /// On iPhone these panels are sheets on the root view (the iPad popovers hang off toolbar buttons).
+    private func compactOnly(_ binding: Binding<Bool>) -> Binding<Bool> {
+        Binding(get: { compact && binding.wrappedValue }, set: { binding.wrappedValue = $0 })
+    }
+
+    @ToolbarContentBuilder
+    private var compactToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarLeading) {
+            if !model.source.outline.isEmpty {
+                Button("Contents", systemImage: "list.bullet") { showOutline = true }
+            }
+            Button(pageLabel) { showPagePicker = true }
+                .monospacedDigit()
+                .accessibilityLabel(pageAccessibilityLabel)
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button(model.currentBookmark == nil ? "Bookmark this page" : "Remove bookmark",
+                   systemImage: model.currentBookmark == nil ? "bookmark" : "bookmark.fill") {
+                Task { await model.toggleBookmark() }
+            }
+            Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
+            Menu("More", systemImage: "ellipsis.circle") {
+                Button(model.readAloud.state == .idle ? "Read aloud" : "Stop reading aloud",
+                       systemImage: model.readAloud.state == .idle ? "speaker.wave.2" : "speaker.slash") {
+                    if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
+                }
+                Button("Highlights & Bookmarks", systemImage: "highlighter") { showHighlights = true }
+                if model.reflowable != nil && model.source.pageCount > 1 {
+                    Section {
+                        Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1, remember: false) }
+                            .disabled(model.currentPage == 0)
+                        Button("Next chapter", systemImage: "chevron.right") { model.go(to: model.currentPage + 1, remember: false) }
+                            .disabled(model.currentPage >= model.source.pageCount - 1)
+                    }
+                }
+                if model.reflowable != nil {
+                    if !(model.source is WebArchiveSource) {
+                        Picker("Layout", selection: $layout) {
+                            ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                        }
+                    }
+                    Section("Text size") {
+                        Button("Larger", systemImage: "plus.magnifyingglass") { fontScale = min(2.0, fontScale + 0.1) }
+                        Button("Smaller", systemImage: "minus.magnifyingglass") { fontScale = max(0.7, fontScale - 0.1) }
+                    }
+                } else {
+                    Picker("Page turning", selection: $turning) {
+                        ForEach(PageTurning.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                    }
+                    Section("Text recognition") {
+                        Button("Recognize text on this page", systemImage: "doc.text.viewfinder") { model.recognizeCurrentPage() }
+                        Button("Recognize whole document", systemImage: "doc.on.doc") { model.recognizeDocument() }
+                        if model.pdfDocument != nil {
+                            Toggle(isOn: $model.imageMode) { Label("Live Text mode (for scans)", systemImage: "camera.viewfinder") }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -418,6 +514,43 @@ private struct TitleAndIconOrIcon: LabelStyle {
         } else {
             configuration.icon
         }
+    }
+}
+
+/// Play/pause, stop, speed and voice while reading aloud.
+private struct ReadAloudBar: View {
+    @Bindable var readAloud: ReadAloud
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(readAloud.state == .playing ? "Pause" : "Play",
+                   systemImage: readAloud.state == .playing ? "pause.fill" : "play.fill") { readAloud.toggle() }
+                .labelStyle(.iconOnly).font(.title3).frame(width: 40, height: 36)
+            Button("Stop", systemImage: "stop.fill") { readAloud.stop() }
+                .labelStyle(.iconOnly).frame(width: 36, height: 36)
+            Divider().frame(height: 22)
+            Menu {
+                Picker("Speed", selection: $readAloud.speed) {
+                    ForEach([0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { Text(String(format: "%g×", $0)).tag($0) }
+                }
+            } label: {
+                Text(String(format: "%g×", readAloud.speed)).monospacedDigit().frame(minWidth: 44, minHeight: 36)
+            }
+            Menu {
+                Picker("Voice", selection: $readAloud.voiceID) {
+                    Text("Automatic (by language)").tag(String?.none)
+                    ForEach(readAloud.voicesForCurrentLanguage, id: \.identifier) { voice in
+                        Text("\(voice.name)\(voice.quality == .premium ? " · Premium" : voice.quality == .enhanced ? " · Enhanced" : "")")
+                            .tag(Optional(voice.identifier))
+                    }
+                }
+            } label: {
+                Label("Voice", systemImage: "person.wave.2").labelStyle(.iconOnly).frame(width: 40, height: 36)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .glassEffect(in: .capsule)
     }
 }
 

@@ -10,7 +10,7 @@ final class ReaderFlowTests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         // Coordinate-based tests below assume vertical scrolling for PDF/DjVu; horizontal has its own test.
-        app.launchArguments += ["-pageTurning", name.contains("Horizontal") ? "horizontal" : "vertical"]
+        app.launchArguments += ["-pageTurning", name.contains("Horizontal") || name.contains("IPhone") ? "horizontal" : "vertical"]
         app.launch()
     }
 
@@ -241,6 +241,15 @@ final class ReaderFlowTests: XCTestCase {
         open(bookMatching: "DJVU")
         let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
         XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        // Books reopen where they were left (another test may have moved it): start from page 1.
+        if indicator.label != "Page 1 of 3" {
+            indicator.tap()
+            let go = app.textFields["Go to page"]
+            XCTAssertTrue(go.waitForExistence(timeout: 5))
+            go.tap()
+            go.typeText("1\n")
+            app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        }
         XCTAssertEqual(indicator.label, "Page 1 of 3")
         sleep(2)
         snap("horizontal-1-djvu")
@@ -331,6 +340,98 @@ final class ReaderFlowTests: XCTestCase {
         let entry = app.buttons.matching(NSPredicate(format: "label CONTAINS 'microstates'")).firstMatch
         XCTAssertTrue(entry.waitForExistence(timeout: 5), "Entry not listed")
         snap("readlater-2-list")
+    }
+
+    func testPDFLinkLongPressAddsToReadLater() throws {
+        openFolder("Physics")
+        open(bookMatching: "Linked")
+        XCTAssertTrue(app.buttons["Assistant"].waitForExistence(timeout: 10))
+        sleep(2)
+        snap("pdflink-0-page")
+        // Link annotation ("Scriptorium on GitHub").
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.236)).press(forDuration: 1.2)
+        let add = app.buttons["Add to Read Later"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5), "No menu on a PDF link annotation")
+        snap("pdflink-1-menu")
+        add.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label IN {'Added to Read Later', 'Already in Read Later'}")).firstMatch
+            .waitForExistence(timeout: 5))
+        // URL written as plain text.
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.28)).press(forDuration: 1.2)
+        XCTAssertTrue(add.waitForExistence(timeout: 5), "No menu on a plain-text URL")
+        snap("pdflink-2-plain-url")
+        add.tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["Read Later"].tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Scriptorium on GitHub'")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'python.org'")).firstMatch.exists)
+        snap("pdflink-3-list")
+    }
+
+    /// iPhone layout: library list, More menus, reading EPUB in pages, PDF left-to-right, assistant sheet.
+    func testIPhoneLayout() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone only")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
+        snap("iphone-1-library")
+        app.buttons["More"].tap()
+        XCTAssertTrue(app.buttons["Wi-Fi Transfer"].waitForExistence(timeout: 3))
+        snap("iphone-2-library-menu")
+        app.buttons["Bookmarks"].tap()
+        XCTAssertTrue(app.navigationBars["All Bookmarks"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+
+        openFolder("Fiction")
+        open(bookMatching: "Pride and Prejudice")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15))
+        sleep(3)
+        snap("iphone-3-epub")
+        app.webViews.firstMatch.swipeLeft()
+        sleep(1)
+        snap("iphone-4-epub-next-page")
+        app.buttons["More"].tap()
+        XCTAssertTrue(app.buttons["Highlights & Bookmarks"].waitForExistence(timeout: 3))
+        snap("iphone-5-reader-menu")
+        app.buttons["Highlights & Bookmarks"].tap()
+        XCTAssertTrue(app.staticTexts["Notes"].waitForExistence(timeout: 5) || app.navigationBars["Notes"].exists)
+        app.swipeDown(velocity: .fast)
+        sleep(1)
+        app.buttons["Assistant"].tap()
+        sleep(2)
+        snap("iphone-6-assistant-sheet")
+        app.swipeDown(velocity: .fast)
+        sleep(1)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        sleep(2)
+        snap("iphone-7-pdf")
+    }
+
+    func testReadAloudFollowsTheText() throws {
+        openFolder("Fiction")
+        open(bookMatching: "Тепло и порядок")
+        XCTAssertTrue(app.buttons["Contents"].waitForExistence(timeout: 10))
+        app.buttons["Contents"].tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS 'Глава первая'")).firstMatch.tap()
+        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chapter '")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+        sleep(1)
+        let startChapter = chapterNumber(indicator.label)
+        app.buttons["Read aloud"].tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5), "Player bar did not appear")
+        sleep(2)
+        snap("speech-1-reading")
+        // Chapter 1 is a few short lines; when speech moves on, the reader must follow into chapter 2.
+        let moved = NSPredicate { _, _ in self.chapterNumber(indicator.label) > startChapter }
+        wait(for: [expectation(for: moved, evaluatedWith: nil)], timeout: 40)
+        snap("speech-2-followed")
+        app.buttons["Stop"].tap()
+        XCTAssertTrue(app.buttons["Read aloud"].waitForExistence(timeout: 5))
     }
 
     func testBookmarksAndSearch() throws {

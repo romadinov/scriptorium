@@ -484,5 +484,78 @@
     return true;
   };
 
+  // ---------- read aloud ----------
+
+  const SPEECH_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, dd, dt, .stanza, figcaption';
+  let speechCursor = null, speechIds = 0;
+
+  function speakableBlocks() {
+    return [...book().querySelectorAll(SPEECH_BLOCKS)]
+      .filter((el) => !el.querySelector('p, li, blockquote') && /\p{L}/u.test(el.textContent));
+  }
+
+  /// Next paragraphs to speak: from the top of the visible page on restart, else after the last batch.
+  /// Each gets a stable id so highlights can find it again. Offsets are into textContent.
+  R.speechParagraphs = (restart, count) => {
+    const all = speakableBlocks();
+    let start;
+    if (restart || !speechCursor || !speechCursor.isConnected) {
+      start = all.findIndex((el) => {
+        const r = el.getBoundingClientRect();
+        return paged() ? r.right > 1 && r.left < window.innerWidth : r.bottom > readingPoint().y;
+      });
+      if (start < 0) start = 0;
+    } else {
+      start = all.indexOf(speechCursor) + 1;
+    }
+    const batch = all.slice(start, start + (count || 20));
+    if (batch.length) speechCursor = batch[batch.length - 1];
+    // Running out of loaded text: ask for the next chapter so the next request finds it.
+    if (start + batch.length >= all.length && loaded.length && loaded[loaded.length - 1] + 1 < total) {
+      const next = loaded[loaded.length - 1] + 1;
+      if (requested.next !== next) { requested.next = next; post({ type: 'need', chapter: next, where: 'append' }); }
+    }
+    return batch.map((el) => {
+      if (!el.dataset.sid) el.dataset.sid = String(++speechIds);
+      return { id: Number(el.dataset.sid), text: el.textContent };
+    });
+  };
+
+  function rangeIn(el, start, end) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let pos = 0, startSet = false;
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const next = pos + n.length;
+      if (!startSet && start <= next) { range.setStart(n, Math.max(0, start - pos)); startSet = true; }
+      if (startSet && end <= next) { range.setEnd(n, Math.max(0, end - pos)); return range; }
+      pos = next;
+    }
+    if (startSet) range.setEndAfter(el.lastChild || el);
+    return startSet ? range : null;
+  }
+
+  /// Highlights the sentence being spoken and keeps it on screen.
+  R.speechHighlight = (id, start, length) => {
+    const el = book().querySelector(`[data-sid="${id}"]`);
+    if (!el) return;
+    const range = rangeIn(el, start, start + length);
+    if (!range) return;
+    if (window.CSS && CSS.highlights) CSS.highlights.set('speech', new Highlight(range));
+    const rect = range.getBoundingClientRect();
+    const offscreen = paged()
+      ? rect.left < 0 || rect.left >= window.innerWidth
+      : rect.top < 40 || rect.bottom > window.innerHeight - 40;
+    if (offscreen) {
+      scrollToRect(rect, true);
+      setTimeout(() => { recordAnchor(); report(); }, 400);
+    }
+  };
+
+  R.speechClear = () => {
+    if (window.CSS && CSS.highlights) CSS.highlights.delete('speech');
+    speechCursor = null;
+  };
+
   applyColumns();
 })();
