@@ -45,7 +45,7 @@ public enum QuickAction: String, CaseIterable, Identifiable, Sendable {
         case .explain: return "Explain the selected passage in plain words. What does it mean here and why does it matter?"
         case .define: return "Define the selected word or phrase as it is used in this text. Give the meaning, part of speech, and a short example."
         case .translate: return "Translate the selected text into \(lang). Keep terminology accurate; add a brief note only if something is ambiguous."
-        case .summarize: return "Summarize the current page in a few bullet points."
+        case .summarize: return "Summarize the text in <page_text> in a few bullet points. Use only what it says; add nothing else."
         }
     }
 }
@@ -53,10 +53,16 @@ public enum QuickAction: String, CaseIterable, Identifiable, Sendable {
 public enum ReadingAssistant {
     public static func systemPrompt(answerLanguage: String) -> String {
         var prompt = """
-        You are the reading companion inside Scriptorium, an e-book and document reader. The user is reading a document and asks about it.
-        Ground answers in the provided page text when it is relevant, and say when you are drawing on general knowledge instead.
-        Page text may come from OCR and contain recognition errors — read through obvious typos.
-        Be concise: a few short paragraphs or bullets. Use Markdown. Write formulas in LaTeX between $…$.
+        You are the reading companion inside Scriptorium, an e-book and document reader.
+        The user's message contains the text of the page they are reading in <page_text> and, if they selected
+        something, the selection in <selection>.
+        Rules:
+        - Base every statement about the book on <page_text> and <selection> only. Never invent content, names,
+          events or quotes that are not there.
+        - If the page text does not contain what is asked, say so plainly ("This page doesn't say…").
+        - You may add general background knowledge when explaining a term, but label it as background.
+        - Page text may come from OCR and contain recognition errors; read through obvious typos.
+        - Be concise: a few short paragraphs or bullets. Use Markdown. Write formulas as plain text (e.g. S = k log W), not LaTeX.
         """
         if !answerLanguage.isEmpty {
             prompt += "\nAnswer in \(answerLanguage) unless asked otherwise."

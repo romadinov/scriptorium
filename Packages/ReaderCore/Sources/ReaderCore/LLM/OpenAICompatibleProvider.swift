@@ -24,7 +24,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
         request.timeoutInterval = 600
 
         let wire = [["role": "system", "content": system]] + messages.map { ["role": $0.role.rawValue, "content": $0.content] }
-        let body: [String: Any] = ["model": model, "stream": true, "messages": wire]
+        let body: [String: Any] = ["model": model, "stream": true, "messages": wire, "temperature": 0.2]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         return SSE.deltas(for: request) { json in

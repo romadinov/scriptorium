@@ -7,7 +7,14 @@ public struct AppleOnDeviceProvider: LLMProvider {
     public init() {}
 
     public var displayName: String { "Apple on-device" }
-    public var contextCharacterBudget: Int { 5_000 }
+    // ~4K-token window shared by instructions, page text, question and answer.
+    public var contextCharacterBudget: Int { 3_500 }
+
+    /// Whether the on-device model understands text in this language (BCP-47, e.g. "ru-RU").
+    /// It supports a fixed set (no Russian, Ukrainian, Polish…); unsupported text produces confident junk.
+    public static func supports(language: String) -> Bool {
+        SystemLanguageModel.default.supportsLocale(Locale(identifier: language))
+    }
 
     /// `nil` when the model can be used; otherwise a human-readable reason.
     public static var unavailableReason: String? {
@@ -29,7 +36,9 @@ public struct AppleOnDeviceProvider: LLMProvider {
                     // The session API is turn-based; fold earlier turns into the prompt.
                     let prompt = Self.flatten(messages)
                     var emitted = ""
-                    for try await snapshot in session.streamResponse(to: prompt) {
+                    // Low temperature: reading questions want faithful answers, not creative ones.
+                    let options = GenerationOptions(temperature: 0.2)
+                    for try await snapshot in session.streamResponse(to: prompt, options: options) {
                         let full = snapshot.content
                         if full.hasPrefix(emitted) {
                             continuation.yield(String(full.dropFirst(emitted.count)))

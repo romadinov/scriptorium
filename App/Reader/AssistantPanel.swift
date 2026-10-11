@@ -15,6 +15,10 @@ struct AssistantPanel: View {
             header(settings: $settings.llm.kind)
             Divider()
             messages
+            if let notice = chat.notice {
+                NoticeCard(notice: notice, settings: settings, retry: { model.ask("", action: .summarize, settings: settings) })
+                    .padding(.horizontal).padding(.top, 6)
+            }
             if let error = chat.error {
                 Text(error).font(.footnote).foregroundStyle(.red).padding(.horizontal).padding(.top, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -133,10 +137,19 @@ private struct TurnView: View {
     var body: some View {
         switch turn.role {
         case .user:
-            Text(turn.display)
-                .padding(10)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(turn.display)
+                    .padding(10)
+                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                if let context = turn.context {
+                    DisclosureGroup("Page text sent (\(context.count) characters)") {
+                        Text(context).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         case .assistant:
             VStack(alignment: .leading, spacing: 6) {
                 if turn.display.isEmpty && streaming {
@@ -174,5 +187,37 @@ private struct MarkdownText: View {
     private func inline(_ string: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         return (try? AttributedString(markdown: string, options: options)) ?? AttributedString(string)
+    }
+}
+
+/// Explains why a question wasn't sent and offers the fix.
+private struct NoticeCard: View {
+    let notice: ChatModel.Notice
+    @Bindable var settings: SettingsStore
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            switch notice {
+            case .noText:
+                Label("This page has no text yet", systemImage: "doc.text.magnifyingglass").font(.headline)
+                Text("It looks like a scan. Use Text › Recognize text on this page, then ask again.")
+                    .font(.callout).foregroundStyle(.secondary)
+            case .unsupportedLanguage(let language):
+                Label("The on-device model can't read \(language)", systemImage: "character.bubble").font(.headline)
+                Text("Apple's on-device model supports only some languages and produces nonsense for others. Use a model that understands \(language):")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Local server") { settings.llm.kind = .openAICompatible }
+                        .buttonStyle(.borderedProminent)
+                    Button("Claude") { settings.llm.kind = .anthropic }
+                        .buttonStyle(.bordered)
+                }
+                Text("Change servers and keys in Settings.").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
     }
 }

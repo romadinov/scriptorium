@@ -434,6 +434,81 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Read aloud"].waitForExistence(timeout: 5))
     }
 
+    func testFileOperationsSwipeMoveSelectDelete() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .phone)
+        openFolder("Physics")
+        // Swipe → Delete asks first; Cancel keeps the book.
+        let linked = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Linked'")).firstMatch
+        XCTAssertTrue(linked.waitForExistence(timeout: 10))
+        linked.swipeLeft()
+        app.buttons["Delete"].firstMatch.tap()
+        let confirm = app.buttons["Delete"].firstMatch
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Delete “Linked”'")).firstMatch
+            .waitForExistence(timeout: 5), "No delete confirmation")
+        snap("files-1-confirm")
+        confirm.tap()
+        XCTAssertTrue(linked.waitForNonExistence(timeout: 5), "Book not deleted")
+
+        // Swipe → Move → new folder "Archive" inside Library.
+        let pdf = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Thermodynamics, PDF'")).firstMatch
+        XCTAssertTrue(pdf.waitForExistence(timeout: 5))
+        pdf.swipeLeft()
+        app.buttons["Move"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH 'Move'")).firstMatch.waitForExistence(timeout: 5))
+        snap("files-2-move")
+        app.buttons["New folder in Library"].tap()
+        let name = app.textFields["Name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.typeText("Archive")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(pdf.waitForNonExistence(timeout: 5), "Book not moved")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        openFolder("Archive")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Thermodynamics'")).firstMatch.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        // Select two books in Fiction and delete them together.
+        openFolder("Fiction")
+        app.buttons["Select"].tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS 'Pride'")).firstMatch.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS 'Тепло'")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 3))
+        snap("files-3-selected")
+        app.toolbars.buttons["Delete"].tap()
+        XCTAssertTrue(app.staticTexts["Delete 2 items?"].waitForExistence(timeout: 5))
+        app.buttons["Delete 2 Items"].tap()
+        XCTAssertTrue(app.staticTexts["Empty folder"].waitForExistence(timeout: 5), "Selected books not deleted")
+        snap("files-4-empty")
+    }
+
+    func testAssistantRefusesUnsupportedLanguageAndShowsContext() throws {
+        // Russian page + Apple's on-device model (which doesn't support Russian) → explanation, no junk.
+        openFolder("Fiction")
+        open(bookMatching: "Тепло и порядок")
+        XCTAssertTrue(app.buttons["Assistant"].waitForExistence(timeout: 10))
+        sleep(2)
+        app.buttons["Assistant"].tap()
+        app.buttons["Summarize page"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'The on-device model can'")).firstMatch
+            .waitForExistence(timeout: 10), "No unsupported-language notice")
+        snap("ai-1-unsupported")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        // English page: a real answer, with the page text that was sent available under the question.
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["Assistant"].waitForExistence(timeout: 10))
+        sleep(2)
+        app.buttons["Assistant"].tap()
+        app.buttons["Summarize page"].tap()
+        waitForAnswer()
+        let sent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Page text sent'")).firstMatch
+        XCTAssertTrue(sent.waitForExistence(timeout: 5), "No 'page text sent' disclosure")
+        sent.tap()
+        snap("ai-2-summary-with-context")
+    }
+
     func testBookmarksAndSearch() throws {
         // Bookmark page 2 of the DjVu book, then find it from the library-wide view by searching.
         openFolder("Physics")

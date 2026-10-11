@@ -175,11 +175,14 @@ final class LibraryStore {
         return imported
     }
 
-    func createFolder(named name: String, in parent: Folder) throws {
+    @discardableResult
+    func createFolder(named name: String, in parent: Folder) throws -> Folder {
         let name = try Self.validName(name)
-        try FileManager.default.createDirectory(at: parent.url.appending(path: name), withIntermediateDirectories: false)
+        let url = parent.url.appending(path: name)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        defer { reload() }
         mirrorInboxFolders()
-        reload()
+        return Folder(url: url)
     }
 
     func rename(_ url: URL, to newName: String) throws {
@@ -207,6 +210,13 @@ final class LibraryStore {
         movePositions(from: url, to: target)
         if wasFolder { inbox?.mirrorMove(from: oldPath, to: relativePath(target)) }
         reload()
+    }
+
+    /// Books inside a folder (all levels) — shown when confirming a folder deletion.
+    func bookCount(in url: URL) -> Int {
+        guard isDirectory(url) else { return 1 }
+        let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
+        return enumerator?.compactMap { $0 as? URL }.filter(DocumentOpener.canOpen).count ?? 0
     }
 
     func delete(_ url: URL) {

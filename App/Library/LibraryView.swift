@@ -34,8 +34,10 @@ private struct FolderView: View {
     @State private var showSettings = false
     @State private var showTransfer = false
     @State private var naming: NamingTask?
-    @State private var moving: URL?
-    @State private var deleting: URL?
+    @State private var moving: [URL] = []
+    @State private var deleting: [URL] = []
+    @State private var selection: Set<URL> = []
+    @State private var editMode: EditMode = .inactive
     @State private var errorMessage: String?
     @State private var inboxReport: InboxSync.Report?
     @State private var showReadLater = false
@@ -48,6 +50,45 @@ private struct FolderView: View {
     private var isRoot: Bool { folder.url == library.root }
 
     var body: some View {
+        Group {
+            if query.isEmpty && layout == .list && !(folders.isEmpty && books.isEmpty) {
+                fileList
+            } else {
+                scrollContent
+            }
+        }
+        .modifier(LibraryChrome(view: self))
+    }
+
+    /// List layout: a real List so rows get swipe actions (Delete, Move) and multi-select.
+    private var fileList: some View {
+        List(selection: $selection) {
+            ForEach(folders) { sub in
+                NavigationLink(value: LibraryRoute.folder(sub)) { FolderRow(folder: sub) }
+                    .tag(sub.url)
+                    .listRowInsets(EdgeInsets())
+                    .contextMenu { itemMenu(sub.url, name: sub.name) }
+                    .swipeActions(edge: .trailing) { swipeButtons(sub.url) }
+            }
+            ForEach(books) { book in
+                NavigationLink(value: LibraryRoute.book(book)) { BookRow(book: book) }
+                    .tag(book.url)
+                    .listRowInsets(EdgeInsets())
+                    .contextMenu { itemMenu(book.url, name: book.title) }
+                    .swipeActions(edge: .trailing) { swipeButtons(book.url) }
+            }
+        }
+        .listStyle(.plain)
+        .environment(\.editMode, $editMode)
+    }
+
+    @ViewBuilder
+    private func swipeButtons(_ url: URL) -> some View {
+        Button("Delete", systemImage: "trash", role: .destructive) { deleting = [url] }
+        Button("Move", systemImage: "folder") { moving = [url] }.tint(.indigo)
+    }
+
+    private var scrollContent: some View {
         ScrollView {
             if !query.isEmpty {
                 SearchResults(results: library.search(query))
@@ -93,6 +134,11 @@ private struct FolderView: View {
                 .padding(24)
             }
         }
+    }
+
+    // Everything around the content (toolbars, sheets, alerts) — shared by the list and scroll layouts.
+    fileprivate func chrome<Content: View>(_ content: Content) -> some View {
+        content
         .safeAreaInset(edge: .bottom) {
             if !library.autoImported.isEmpty {
                 ImportBanner(paths: library.autoImported) { library.autoImported = [] }
@@ -107,8 +153,10 @@ private struct FolderView: View {
             if sizeClass == .compact {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if library.isSyncingInbox { ProgressView() }
+                    if editMode.isEditing { selectButton }
                     Button("Import", systemImage: "plus") { importing = true }
                     Menu("More", systemImage: "ellipsis.circle") {
+                        if layout == .list { Button("Select", systemImage: "checkmark.circle") { editMode = .active; selection = [] } }
                         Button("Sync iCloud Inbox", systemImage: "icloud.and.arrow.down") { Task { await syncInbox() } }
                         Button("Bookmarks", systemImage: "bookmark") { showNotes = true }
                         Button("Read Later", systemImage: "text.badge.plus") { showReadLater = true }
@@ -135,10 +183,12 @@ private struct FolderView: View {
         .sheet(isPresented: $showTransfer) { TransferView() }
         .sheet(isPresented: $showReadLater) { ReadLaterView() }
         .sheet(isPresented: $showNotes) { AllNotesView() }
-        .sheet(item: $moving) { url in
-            MovePicker(item: url) { destination in
-                perform { try library.move(url, to: destination) }
-                moving = nil
+        .sheet(isPresented: Binding(get: { !moving.isEmpty }, set: { if !$0 { moving = [] } })) {
+            MovePicker(items: moving) { destination in
+                let items = moving
+                perform { for url in items { try library.move(url, to: destination) } }
+                moving = []
+                editMode = .inactive
             }
         }
         .alert(naming?.title ?? "", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } }),
@@ -152,11 +202,16 @@ private struct FolderView: View {
                 }
             }
         }
-        .confirmationDialog("Delete?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-                            presenting: deleting) { url in
-            Button("Delete \(url.lastPathComponent)", role: .destructive) { library.delete(url) }
-        } message: { url in
-            Text(library.isDirectory(url) ? "The folder and every book in it will be deleted." : "This book will be deleted from the iPad.")
+        .confirmationDialog(deleteTitle, isPresented: Binding(get: { !deleting.isEmpty }, set: { if !$0 { deleting = [] } }),
+                            titleVisibility: .visible) {
+            Button(deleting.count == 1 ? "Delete" : "Delete \(deleting.count) Items", role: .destructive) {
+                for url in deleting { library.delete(url) }
+                deleting = []
+                editMode = .inactive
+            }
+            Button("Cancel", role: .cancel) { deleting = [] }
+        } message: {
+            Text(deleteMessage)
         }
         .alert("Inbox synced", isPresented: Binding(get: { inboxReport != nil }, set: { if !$0 { inboxReport = nil } }),
                presenting: inboxReport) { _ in
@@ -169,6 +224,28 @@ private struct FolderView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .toolbar {
+            if editMode.isEditing {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button("Move", systemImage: "folder") { moving = Array(selection) }
+                        .disabled(selection.isEmpty)
+                    Spacer()
+                    Text(selection.isEmpty ? "Select items" : "\(selection.count) selected").font(.subheadline)
+                    Spacer()
+                    Button("Delete", systemImage: "trash", role: .destructive) { deleting = Array(selection) }
+                        .disabled(selection.isEmpty)
+                }
+            }
+        }
+        .onChange(of: library.revision) { selection = [] }
+    }
+
+    private var selectButton: some View {
+        Button(editMode.isEditing ? "Done" : "Select") {
+            withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+            selection = []
+        }
+        .disabled(layout != .list || (folders.isEmpty && books.isEmpty))
     }
 
     @ToolbarContentBuilder
@@ -193,6 +270,7 @@ private struct FolderView: View {
                 Button("Wi-Fi Transfer", systemImage: "wifi") { showTransfer = true }
                 Button("New Folder", systemImage: "folder.badge.plus") { naming = .newFolder }
                 Button("Import", systemImage: "plus") { importing = true }
+                selectButton
             }
         
     }
@@ -200,9 +278,24 @@ private struct FolderView: View {
     @ViewBuilder
     private func itemMenu(_ url: URL, name: String) -> some View {
         Button("Rename", systemImage: "pencil") { naming = .rename(url, name) }
-        Button("Move to…", systemImage: "folder") { moving = url }
+        Button("Move to…", systemImage: "folder") { moving = [url] }
         Divider()
-        Button("Delete", systemImage: "trash", role: .destructive) { deleting = url }
+        Button("Delete", systemImage: "trash", role: .destructive) { deleting = [url] }
+    }
+
+    private var deleteTitle: String {
+        guard deleting.count == 1, let url = deleting.first else { return "Delete \(deleting.count) items?" }
+        return "Delete “\(library.isDirectory(url) ? url.lastPathComponent : Book(url: url).title)”?"
+    }
+
+    private var deleteMessage: String {
+        let books = deleting.reduce(0) { $0 + library.bookCount(in: $1) }
+        let folders = deleting.filter(library.isDirectory).count
+        if folders == 0 {
+            return books == 1 ? "The book is removed from this device. Highlights and bookmarks stay in iCloud."
+                              : "\(books) books are removed from this device. Highlights and bookmarks stay in iCloud."
+        }
+        return "\(folders == 1 ? "The folder" : "\(folders) folders") and \(books) book\(books == 1 ? "" : "s") inside will be removed from this device. This can't be undone."
     }
 
     private func syncInbox() async {
@@ -550,30 +643,74 @@ extension URL: @retroactive Identifiable {
 }
 
 private struct MovePicker: View {
-    let item: URL
+    let items: [URL]
     let onPick: (Folder) -> Void
     @Environment(LibraryStore.self) private var library
     @Environment(\.dismiss) private var dismiss
+    @State private var newFolderParent: Folder?
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             List(library.allFolders(), id: \.folder.id) { entry in
-                let invalid = entry.folder.url == item || entry.folder.url.path.hasPrefix(item.path + "/")
-                    || entry.folder.url == item.deletingLastPathComponent().standardizedFileURL
-                Button {
-                    onPick(entry.folder)
-                } label: {
-                    Label(entry.depth == 0 ? "Library" : entry.folder.name,
-                          systemImage: entry.depth == 0 ? "books.vertical" : "folder")
-                        .padding(.leading, CGFloat(entry.depth) * 20)
+                HStack {
+                    Button {
+                        onPick(entry.folder)
+                    } label: {
+                        Label(entry.depth == 0 ? "Library" : entry.folder.name,
+                              systemImage: entry.depth == 0 ? "books.vertical" : "folder")
+                            .padding(.leading, CGFloat(entry.depth) * 20)
+                    }
+                    .disabled(invalid(entry.folder))
+                    Spacer()
+                    // Create a folder inside this one and move straight into it.
+                    Button("New folder in \(entry.depth == 0 ? "Library" : entry.folder.name)", systemImage: "folder.badge.plus") {
+                        newFolderParent = entry.folder
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .disabled(items.contains { entry.folder.url == $0 || entry.folder.url.path.hasPrefix($0.path + "/") })
                 }
-                .disabled(invalid)
             }
-            .navigationTitle("Move “\(Book(url: item).title)”")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .alert("New Folder", isPresented: Binding(get: { newFolderParent != nil }, set: { if !$0 { newFolderParent = nil } }),
+                   presenting: newFolderParent) { parent in
+                NameField(initial: "") { name in
+                    do {
+                        let folder = try library.createFolder(named: name, in: parent)
+                        onPick(folder)
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            } message: { parent in
+                Text("Inside \(parent.url == library.root ? "Library" : parent.name). The selection is moved into it.")
+            }
+            .alert("Couldn't create the folder", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(errorMessage ?? "") }
         }
     }
+
+    private var title: String {
+        items.count == 1 ? "Move “\(Book(url: items[0]).title)”" : "Move \(items.count) Items"
+    }
+
+    /// A folder can't go into itself or its own subfolders; moving to the current parent is a no-op.
+    private func invalid(_ folder: Folder) -> Bool {
+        items.allSatisfy { item in
+            folder.url == item || folder.url.path.hasPrefix(item.path + "/")
+                || folder.url == item.deletingLastPathComponent().standardizedFileURL
+        }
+    }
+}
+
+/// Applies the shared toolbar/sheet/alert chrome from FolderView to either layout.
+private struct LibraryChrome: ViewModifier {
+    let view: FolderView
+    func body(content: Content) -> some View { view.chrome(content) }
 }
 
 private struct FolderCell: View {

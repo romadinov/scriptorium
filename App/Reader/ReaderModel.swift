@@ -392,34 +392,51 @@ final class ReaderModel {
             chat.error = error.localizedDescription
             return
         }
+        chat.notice = nil
         let selection = action == .summarize ? "" : self.selection
         let display = action.map { selection.isEmpty ? $0.title : "\($0.title): “\(selection.prefix(120))”" } ?? question
         let prompt = action?.question(selection: selection, language: settings.llm.answerLanguage) ?? question
 
         // Re-send page context when the reader moved or selected something new since the last question.
-        let needsContext = chat.turns.isEmpty || lastAskedAbout?.page != currentPage
+        let needsContext = chat.turns.isEmpty || lastAskedAbout?.page != currentPage || action == .summarize
             || (!selection.isEmpty && lastAskedAbout?.selection != selection)
-        lastAskedAbout = (currentPage, selection)
 
         let page = currentPage
         let title = book.title
         let system = ReadingAssistant.systemPrompt(answerLanguage: settings.llm.answerLanguage)
-        let text = self.text
-        let visibleText = self.visibleText
-        chat.send(display: display, provider: provider, system: system) {
-            guard needsContext else { return prompt }
-            let radius = provider.contextCharacterBudget > 20_000 ? 1 : 0
-            var surrounding: String
-            if let visible = await visibleText?(), !visible.isEmpty {
-                surrounding = String(visible.prefix(provider.contextCharacterBudget))
-            } else {
-                surrounding = await text.context(around: page, radius: radius,
-                                                 characterBudget: provider.contextCharacterBudget, allowOCR: true)
+        Task {
+            var message = prompt
+            var sentContext: String?
+            if needsContext {
+                let surrounding = await pageContext(budget: provider.contextCharacterBudget, wide: provider.contextCharacterBudget > 20_000)
+                // Nothing to read (a scan that hasn't been recognised): say so rather than let the model invent.
+                if surrounding.trimmingCharacters(in: .whitespacesAndNewlines).count < 20 && selection.isEmpty {
+                    chat.notice = .noText
+                    return
+                }
+                // Apple's on-device model only understands some languages; anything else comes back as junk.
+                if provider is AppleOnDeviceProvider,
+                   let language = SpeechPlanner.detectLanguage(selection.isEmpty ? surrounding : selection + " " + surrounding),
+                   !AppleOnDeviceProvider.supports(language: language) {
+                    chat.notice = .unsupportedLanguage(Locale.current.localizedString(forLanguageCode: language) ?? language)
+                    return
+                }
+                let context = ReadingContext(documentTitle: title, pageIndex: page,
+                                             selection: selection.isEmpty ? nil : selection, surroundingText: surrounding)
+                message = ReadingAssistant.firstMessage(question: prompt, context: context)
+                sentContext = surrounding
             }
-            let context = ReadingContext(documentTitle: title, pageIndex: page,
-                                         selection: selection.isEmpty ? nil : selection, surroundingText: surrounding)
-            return ReadingAssistant.firstMessage(question: prompt, context: context)
+            lastAskedAbout = (page, selection)
+            chat.send(display: display, provider: provider, system: system, sentContext: sentContext) { message }
         }
+    }
+
+    /// Text around the reader's position: what is on screen for reflowable books, the page (± neighbours) otherwise.
+    private func pageContext(budget: Int, wide: Bool) async -> String {
+        if let visible = await visibleText?(), !visible.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return String(visible.prefix(budget))
+        }
+        return await text.context(around: currentPage, radius: wide ? 1 : 0, characterBudget: budget, allowOCR: true)
     }
 
     // MARK: OCR
@@ -466,18 +483,28 @@ final class ChatModel {
         var role: ChatMessage.Role
         var display: String
         var wire: String
+        /// Page text sent with this question (shown under it, so answers can be checked).
+        var context: String?
+    }
+
+    /// Why a question wasn't sent (shown as a card with a way out).
+    enum Notice: Equatable {
+        case noText
+        case unsupportedLanguage(String)
     }
 
     var turns: [Turn] = []
     var isStreaming = false
     var error: String?
+    var notice: Notice?
     @ObservationIgnored private var task: Task<Void, Never>?
 
-    func send(display: String, provider: LLMProvider, system: String, buildPrompt: @escaping @MainActor () async -> String) {
+    func send(display: String, provider: LLMProvider, system: String, sentContext: String? = nil,
+              buildPrompt: @escaping @MainActor () async -> String) {
         task?.cancel()
         error = nil
         isStreaming = true
-        let user = Turn(role: .user, display: display, wire: display)
+        let user = Turn(role: .user, display: display, wire: display, context: sentContext)
         let reply = Turn(role: .assistant, display: "", wire: "")
         turns.append(user)
         turns.append(reply)
@@ -514,5 +541,6 @@ final class ChatModel {
         stop()
         turns = []
         error = nil
+        notice = nil
     }
 }
