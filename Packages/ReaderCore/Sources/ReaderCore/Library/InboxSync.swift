@@ -85,6 +85,8 @@ public struct InboxSync: Sendable {
         }
 
         for (relative, url) in Self.files(under: inbox) {
+            // Background runs can be cut short; whatever was already moved stays moved.
+            if Task.isCancelled { break }
             let name = url.lastPathComponent
             guard DocumentOpener.canOpen(url) else {
                 report.skipped.append(relative)
@@ -150,6 +152,11 @@ public struct InboxSync: Sendable {
             items.append((String(full.dropFirst(base.count + 1)), itemURL, isDirectory))
         }
         return items
+    }
+
+    /// True if any supported book is waiting in the Inbox.
+    public static func hasBooks(in inbox: URL) -> Bool {
+        files(under: inbox).contains { DocumentOpener.canOpen($0.url) }
     }
 
     static func isEmptyTree(_ url: URL) -> Bool {

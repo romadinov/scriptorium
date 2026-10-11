@@ -1,6 +1,6 @@
 # Scriptorium
 
-An iPad reader for **PDF, DjVu, EPUB and FB2**, with an AI reading companion, on-device text recognition,
+An iPad reader for **PDF, DjVu, EPUB, FB2, CHM and Safari web archives**, with an AI reading companion, on-device text recognition,
 a dictionary, highlights that sync through iCloud, a folder library and Wi-Fi upload from a browser.
 
 ## Features
@@ -9,7 +9,15 @@ a dictionary, highlights that sync through iCloud, a folder library and Wi-Fi up
   - PDF uses PDFKit, with native selection.
   - DjVu uses a vendored DjVuLibre, keeping the hidden text layer and the table of contents.
   - EPUB 2/3 and FB2 / FB2.zip are converted into one continuous book.
-- **Reading EPUB/FB2**: book-like **pages you swipe horizontally** (two-page spread in landscape, tap the edges
+  - CHM (Microsoft Compiled HTML Help) uses a vendored CHMLib. Legacy encodings are converted to UTF-8 and the
+    table of contents comes from the `.hhc` file.
+  - Safari `.webarchive` files are unpacked to local files, with scripts removed, and shown as one continuous page.
+- **Reading PDF/DjVu**: **pages left to right** (swipe, pinch to zoom each page) or vertical scrolling. Switch with
+  the page-layout button.
+- **Page navigation**: tap the page counter for a slider and a "go to page" field. For EPUB/FB2/CHM, real page
+  numbers for the whole book are counted in the background for the current text size and screen; until then they
+  are estimates, marked "≈".
+- **Reading EPUB/FB2/CHM**: book-like **pages you swipe horizontally** (two-page spread in landscape, tap the edges
   to turn) or **continuous vertical scrolling**. Chapters flow into each other without reloading.
   Text size and layout are in the **Aa** menu.
 - **Text recognition**: Vision OCR for scanned PDFs and DjVu; results are cached on the device.
@@ -27,10 +35,14 @@ a dictionary, highlights that sync through iCloud, a folder library and Wi-Fi up
   the book across renames, moves and devices.
 - **Library**: folders with rename / move / delete; reading position is remembered. Supported files can be
   opened from other apps ("Open in Scriptorium").
-- **iCloud Inbox**: *iCloud Drive › Scriptorium › Inbox* mirrors the library's folders. Drop books into any
-  folder from your Mac or another device. **Sync iCloud Inbox** (in the library toolbar, or pull to refresh) imports
-  each book into the same library folder, creates new folders, and removes what it imported from the Inbox.
-  Unsupported files stay in the Inbox.
+- **iCloud Inbox** (iPad): *iCloud Drive › Scriptorium › Inbox* mirrors the library's folders. Drop books into any
+  folder from your Mac or another device:
+  - while the app is open, new books are downloaded and imported automatically;
+  - in the background, iPadOS runs the import when it chooses, typically while the iPad is idle or charging;
+  - **Sync iCloud Inbox** (or pull to refresh) runs it by hand.
+
+  Imported books are removed from the Inbox, and the library itself stays local. Tip: in Files or Finder,
+  choose **Keep Downloaded** on the Inbox folder so books are already on the device when the import runs.
 - **Wi-Fi Transfer**: tap the wifi icon in the library and open the address it shows in a browser on the
   same network. You can upload, create folders, download and delete. It runs only while that screen is open,
   and has no password, so use it on networks you trust.
@@ -41,8 +53,9 @@ a dictionary, highlights that sync through iCloud, a folder library and Wi-Fi up
 |---|---|
 | `Packages/ReaderCore` | Platform-neutral core; builds and tests on macOS with `swift test` |
 | `…/Sources/CDjVuLibre` | DjVuLibre 3.5.28 (GPL-2.0-or-later), vendored; hand-trimmed `config.h` |
+| `…/Sources/CCHMLib` | CHMLib 0.40 (LGPL-2.1), vendored |
 | `…/Sources/ReaderCore/Documents` | `PageSource` protocol, `DjVuPageSource`, `PDFPageSource` |
-| `…/Sources/ReaderCore/Reflowable` | `EPUBSource`, `FB2Source`, `MiniXML` |
+| `…/Sources/ReaderCore/Reflowable` | `EPUBSource`, `FB2Source`, `CHMSource`, `WebArchiveSource`, `MiniXML` |
 | `…/Sources/ReaderCore/Text` | Vision OCR and `TextProvider` (embedded text → OCR cache → fresh OCR) |
 | `…/Sources/ReaderCore/Highlights` | `Highlight` model, `HighlightStore` (iCloud Drive, coordinated, merging) |
 | `…/Sources/ReaderCore/LLM` | Apple on-device, OpenAI-compatible, Anthropic providers; prompts |
@@ -87,4 +100,5 @@ With Command Line Tools only (no Xcode), `scripts/typecheck.sh` type-checks the 
 ## Licence
 
 GPL-3.0-or-later (see `LICENSE`), because Scriptorium bundles DjVuLibre (GPL-2.0-or-later,
-`Packages/ReaderCore/Sources/CDjVuLibre/COPYING`). ZIPFoundation (MIT) unpacks EPUB / FB2.zip.
+`Packages/ReaderCore/Sources/CDjVuLibre/COPYING`). CHMLib is LGPL-2.1 (`Sources/CCHMLib/COPYING`);
+ZIPFoundation (MIT) unpacks EPUB / FB2.zip.

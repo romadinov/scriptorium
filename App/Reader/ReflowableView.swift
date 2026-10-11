@@ -26,7 +26,7 @@ struct ReflowableView: UIViewRepresentable {
         controller.add(WeakMessageHandler(context.coordinator), name: "reader")
         configuration.dataDetectorTypes = []
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = ReaderWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .systemBackground
@@ -47,6 +47,7 @@ struct ReflowableView: UIViewRepresentable {
         context.coordinator.fontScale = fontScale
         context.coordinator.install()
         context.coordinator.loadShell()
+        webView.onSizeChange = { [weak coordinator = context.coordinator] _ in coordinator?.repaginate() }
         return webView
     }
 
@@ -55,6 +56,7 @@ struct ReflowableView: UIViewRepresentable {
         if coordinator.fontScale != fontScale {
             coordinator.fontScale = fontScale
             coordinator.call("reader.configure({scale: s})", ["s": fontScale])
+            coordinator.repaginate()
         }
         coordinator.sync(highlights: model.highlights)
     }
@@ -62,6 +64,7 @@ struct ReflowableView: UIViewRepresentable {
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "reader")
         coordinator.uninstall()
+        coordinator.paginator.cancel()
     }
 
     @MainActor
@@ -74,17 +77,42 @@ struct ReflowableView: UIViewRepresentable {
         private var ready = false
         private var syncedHighlights: [Highlight] = []
         private var loading: Set<Int> = []
+        let paginator: Paginator
 
         init(model: ReaderModel, book: ReflowableSource, layout: ReflowLayout) {
             self.model = model
             self.book = book
             self.layout = layout
+            paginator = Paginator(book: book, layout: layout)
+            super.init()
+            paginator.onMeasured = { [weak model] chapter, pages in model?.measuredPages[chapter] = pages }
+        }
+
+        /// Starts (or restarts) page counting for the current viewport and font.
+        func repaginate() {
+            guard ready, let webView, let host = webView.superview else { return }
+            var size = webView.bounds.size
+            if layout == .scroll {
+                let insets = webView.scrollView.adjustedContentInset
+                size.height -= insets.top + insets.bottom
+            }
+            model.measuredPages = [:]
+            paginator.start(in: host, size: size, scale: fontScale)
         }
 
         // MARK: Wiring to the model
 
         func install() {
             model.jumpToPage = { [weak self] index in self?.go(to: index, progress: 0, fragment: nil) }
+            model.jumpToPosition = { [weak self] chapter, progress in self?.go(to: chapter, progress: progress, fragment: nil) }
+            // Text lengths drive page estimates until the paginator has real counts.
+            let book = book
+            Task { [weak model] in
+                let lengths = await Task.detached(priority: .utility) {
+                    (0..<book.pageCount).map { book.embeddedText(at: $0)?.plainText.count ?? 0 }
+                }.value
+                model?.chapterLengths = lengths
+            }
             model.visibleText = { [weak self] in
                 try? await self?.webView?.evaluateJavaScript("reader.visibleText()") as? String
             }
@@ -101,6 +129,7 @@ struct ReflowableView: UIViewRepresentable {
 
         func uninstall() {
             model.jumpToPage = nil
+            model.jumpToPosition = nil
             model.visibleText = nil
             model.captureSelection = nil
             model.clearSelection = nil
@@ -127,6 +156,7 @@ struct ReflowableView: UIViewRepresentable {
                 await replace(with: model.currentPage, progress: model.startProgress)
                 syncedHighlights = []
                 sync(highlights: model.highlights)
+                repaginate()
             }
         }
 
@@ -138,10 +168,14 @@ struct ReflowableView: UIViewRepresentable {
         }
 
         private func chapterArguments(_ index: Int) -> [String: Any]? {
+            Self.chapterArguments(book: book, index: index, highlights: jsHighlights(chapter: index))
+        }
+
+        static func chapterArguments(book: ReflowableSource, index: Int, highlights: [[String: Any]]) -> [String: Any]? {
             let url = book.chapterURL(at: index)
             guard let data = try? Data(contentsOf: url) else { return nil }
             let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-            return ["index": index, "text": text, "base": url.absoluteString, "hls": jsHighlights(chapter: index)]
+            return ["index": index, "text": text, "base": url.absoluteString, "hls": highlights]
         }
 
         private func insert(_ index: Int, where position: String) async {

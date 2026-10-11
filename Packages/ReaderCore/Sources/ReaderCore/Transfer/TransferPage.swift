@@ -50,12 +50,12 @@ enum TransferPage {
 <body>
 <main>
   <h1>Scriptorium — Wi-Fi Transfer</h1>
-  <p class="sub">PDF, DjVu, EPUB and FB2. Keep Scriptorium open on the iPad while transferring.</p>
+  <p class="sub">PDF, DjVu, EPUB, FB2, CHM and Safari web archives. Keep Scriptorium open on the iPad while transferring.</p>
   <div class="bar">
     <div class="crumbs" id="crumbs"></div>
     <button id="mkdir">New folder</button>
     <button class="primary" id="pick">Upload files…</button>
-    <input type="file" id="files" multiple hidden accept=".pdf,.djvu,.djv,.epub,.fb2,.zip">
+    <input type="file" id="files" multiple hidden accept=".pdf,.djvu,.djv,.epub,.fb2,.zip,.webarchive,.chm">
   </div>
   <div id="drop">Drop books here to upload them into this folder</div>
   <div class="uploads" id="uploads"></div>

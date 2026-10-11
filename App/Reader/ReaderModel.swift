@@ -35,6 +35,60 @@ final class ReaderModel {
     /// Page within the current chapter (reflowable books in page layout).
     var subPage: SubPage?
 
+    // Whole-book page numbers for reflowable books: real counts from the Paginator where measured,
+    // estimates from text length elsewhere.
+    var measuredPages: [Int: Int] = [:]
+    var chapterLengths: [Int] = []
+    @ObservationIgnored var jumpToPosition: ((Int, Double) -> Void)?
+
+    var chapterPages: [Int] {
+        let count = source.pageCount
+        let measuredChars = measuredPages.keys.reduce(0) { $0 + (chapterLengths.indices.contains($1) ? chapterLengths[$1] : 0) }
+        let measuredTotal = measuredPages.values.reduce(0, +)
+        let pagesPerChar = measuredChars > 0 ? Double(measuredTotal) / Double(measuredChars) : 1.0 / 1500
+        return (0..<count).map { chapter in
+            if let pages = measuredPages[chapter] { return pages }
+            let chars = chapterLengths.indices.contains(chapter) ? chapterLengths[chapter] : 1500
+            return max(1, Int((Double(chars) * pagesPerChar).rounded()))
+        }
+    }
+
+    var pagesAreExact: Bool { reflowable != nil && measuredPages.count == source.pageCount }
+
+    /// 1-based page in the whole book.
+    var globalPage: Int {
+        let pages = chapterPages
+        guard pages.indices.contains(currentPage) else { return 1 }
+        let before = pages[..<currentPage].reduce(0, +)
+        let inChapter = subPage.map { min($0.page, pages[currentPage]) }
+            ?? Int((pageProgress * Double(max(0, pages[currentPage] - 1))).rounded()) + 1
+        return before + max(1, inChapter)
+    }
+
+    var totalPages: Int { reflowable == nil ? source.pageCount : chapterPages.reduce(0, +) }
+
+    /// Chapter and position within it for a 1-based whole-book page.
+    func location(ofGlobalPage page: Int) -> (chapter: Int, progress: Double) {
+        var remaining = max(1, page)
+        for (chapter, pages) in chapterPages.enumerated() {
+            if remaining <= pages {
+                return (chapter, pages > 1 ? Double(remaining - 1) / Double(pages - 1) : 0)
+            }
+            remaining -= pages
+        }
+        return (max(0, source.pageCount - 1), 1)
+    }
+
+    func go(toGlobalPage page: Int) {
+        guard reflowable != nil else { return go(to: page - 1) }
+        let target = location(ofGlobalPage: page)
+        if let jumpToPosition {
+            jumpToPosition(target.chapter, target.progress)
+        } else {
+            jumpToPage?(target.chapter)
+        }
+    }
+
     // Highlights
     var highlights: [Highlight] = []
     var tappedHighlight: Highlight?

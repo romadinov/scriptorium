@@ -34,6 +34,7 @@ enum LibraryRoute: Hashable {
 extension UTType {
     static let djvu = UTType(importedAs: "org.djvu.djvu")
     static let fb2 = UTType(importedAs: "org.gribuser.fb2")
+    static let chm = UTType(filenameExtension: "chm") ?? UTType(importedAs: "com.microsoft.chm")
 }
 
 /// Books live in Documents/Books, organised in folders (also visible in the Files app).
@@ -44,12 +45,15 @@ final class LibraryStore {
     /// Bumped whenever files change, so folder views reload.
     private(set) var revision = 0
 
-    let root: URL = {
+    /// Documents/Books — static so background tasks can import without the UI.
+    nonisolated static let rootURL: URL = {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appending(path: "Books")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.standardizedFileURL
     }()
+
+    var root: URL { Self.rootURL }
 
     var rootFolder: Folder { Folder(url: root) }
 
@@ -59,6 +63,12 @@ final class LibraryStore {
     private(set) var inbox: InboxSync?
     private(set) var inboxLocation = ""
     private(set) var isSyncingInbox = false
+    private var inboxIsCloud = false
+    /// Books imported automatically (watcher or background), shown as a banner in the library.
+    var autoImported: [String] = []
+    @ObservationIgnored private lazy var watcher = InboxWatcher { [weak self] in
+        Task { await self?.autoImport() }
+    }
 
     init() {
         Task { await resolveInbox() }
@@ -66,17 +76,33 @@ final class LibraryStore {
 
     private func resolveInbox() async {
         let root = root
-        let (url, isCloud) = await Task.detached(priority: .utility) { () -> (URL, Bool) in
-            if let documents = ICloudFiles.documentsDirectory(containerIdentifier: "iCloud.com.romadinov.reader") {
-                return (documents.appending(path: "Inbox"), true)
-            }
-            let local = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            return (local.appending(path: "Inbox"), false)
-        }.value
+        let (url, isCloud) = await Task.detached(priority: .utility) { InboxLocation.resolve() }.value
         let sync = InboxSync(library: root, inbox: url)
         inbox = sync
+        inboxIsCloud = isCloud
         inboxLocation = isCloud ? "iCloud Drive › Scriptorium › Inbox" : "On My iPad › Scriptorium › Inbox"
         await Task.detached(priority: .utility) { _ = try? sync.mirrorFolders() }.value
+        startWatchingInbox()
+    }
+
+    /// Foreground: watch the Inbox and import new books as they arrive.
+    func startWatchingInbox() {
+        let background = InboxBackgroundImport.takeBackgroundImports()
+        if !background.isEmpty { autoImported += background }
+        guard let inbox else { return }
+        watcher.start(inbox: inbox.inbox, isCloud: inboxIsCloud)
+        Task { await autoImport() }   // anything that arrived while we were away
+    }
+
+    func stopWatchingInbox() {
+        watcher.stop()
+    }
+
+    private func autoImport() async {
+        guard let inbox, InboxSync.hasBooks(in: inbox.inbox) else { return }
+        if let report = await syncInbox(), !report.imported.isEmpty {
+            autoImported += report.imported
+        }
     }
 
     /// Imports everything waiting in the Inbox into the matching library folders and empties the Inbox.

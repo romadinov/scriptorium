@@ -5,14 +5,22 @@ import SwiftUI
 /// PDFKit viewer for PDFs with a text layer: native selection, links, zoom.
 struct PDFKitView: UIViewRepresentable {
     let model: ReaderModel
+    var turning: PageTurning = .vertical
 
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
         view.document = model.pdfDocument
-        view.displayMode = .singlePageContinuous
-        view.displayDirection = .vertical
+        if turning == .horizontal {
+            // Book-like: one page per screen, swipe left/right.
+            view.displayMode = .singlePage
+            view.displayDirection = .horizontal
+            view.usePageViewController(true, withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: 16])
+        } else {
+            view.displayMode = .singlePageContinuous
+            view.displayDirection = .vertical
+        }
         view.autoScales = true
         view.pageShadowsEnabled = true
         if let page = model.pdfDocument?.page(at: model.currentPage) { view.go(to: page) }

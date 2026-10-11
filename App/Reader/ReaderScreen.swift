@@ -52,6 +52,7 @@ private struct ReaderContent: View {
     @State private var showTranslation = false
     @AppStorage("fontScale") private var fontScale = 1.0
     @AppStorage("reflowLayout") private var layout: ReflowLayout = .paged
+    @AppStorage("pageTurning") private var turning: PageTurning = .horizontal
     @State private var showHighlights = false
 
     var body: some View {
@@ -115,12 +116,16 @@ private struct ReaderContent: View {
     @ViewBuilder
     private var viewer: some View {
         if let book = model.reflowable {
-            ReflowableView(model: model, book: book, layout: layout, fontScale: fontScale)
-                .id(layout)
+            ReflowableView(model: model, book: book, layout: effectiveLayout, fontScale: fontScale)
+                .id(effectiveLayout)
         } else if model.imageMode || model.pdfDocument == nil {
-            PagedImageView(model: model)
+            if turning == .horizontal {
+                HorizontalPageView(model: model).id(turning)
+            } else {
+                PagedImageView(model: model).id(turning)
+            }
         } else {
-            PDFKitView(model: model)
+            PDFKitView(model: model, turning: turning).id(turning)
         }
     }
 
@@ -137,16 +142,17 @@ private struct ReaderContent: View {
                         .frame(minWidth: 320, minHeight: 400)
                     }
             }
-            if model.reflowable != nil {
+            if model.reflowable != nil && model.source.pageCount > 1 {
                 Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1) }
                     .disabled(model.currentPage == 0)
             }
             Button(pageLabel) { showPagePicker = true }
                 .monospacedDigit()
+                .accessibilityLabel(pageAccessibilityLabel)
                 .popover(isPresented: $showPagePicker) {
                     PagePicker(model: model).padding().frame(width: 320)
                 }
-            if model.reflowable != nil {
+            if model.reflowable != nil && model.source.pageCount > 1 {
                 Button("Next chapter", systemImage: "chevron.right") { model.go(to: model.currentPage + 1) }
                     .disabled(model.currentPage >= model.source.pageCount - 1)
             }
@@ -154,8 +160,10 @@ private struct ReaderContent: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if model.reflowable != nil {
                 Menu("Reading options", systemImage: "textformat.size") {
-                    Picker("Layout", selection: $layout) {
-                        ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                    if !(model.source is WebArchiveSource) {
+                        Picker("Layout", selection: $layout) {
+                            ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                        }
                     }
                     Section("Text size") {
                         Button("Larger", systemImage: "plus.magnifyingglass") { fontScale = min(2.0, fontScale + 0.1) }
@@ -164,6 +172,11 @@ private struct ReaderContent: View {
                     }
                 }
             } else {
+                Menu("Page layout", systemImage: turning.systemImage) {
+                    Picker("Page turning", selection: $turning) {
+                        ForEach(PageTurning.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                    }
+                }
                 Menu("Text", systemImage: "text.viewfinder") {
                     Button("Recognize text on this page", systemImage: "doc.text.viewfinder") { model.recognizeCurrentPage() }
                     Button("Recognize whole document", systemImage: "doc.on.doc") { model.recognizeDocument() }
@@ -187,13 +200,20 @@ private struct ReaderContent: View {
         }
     }
 
+    /// Web pages are read as one continuous page; books follow the user's layout choice.
+    private var effectiveLayout: ReflowLayout {
+        model.source is WebArchiveSource ? .scroll : layout
+    }
+
     private var pageLabel: String {
-        let total = model.source.pageCount
-        guard model.reflowable != nil else { return "\(model.currentPage + 1) / \(total)" }
-        if let sub = model.subPage, layout == .paged {
-            return "Ch. \(model.currentPage + 1) / \(total) · \(sub.page)/\(sub.pages)"
-        }
-        return "Ch. \(model.currentPage + 1) / \(total)"
+        guard model.reflowable != nil else { return "\(model.currentPage + 1) / \(model.source.pageCount)" }
+        return "\(model.globalPage) / \(model.pagesAreExact ? "" : "≈")\(model.totalPages)"
+    }
+
+    /// Spoken (and used by UI tests): "Chapter 2 of 9, page 34 of 480".
+    private var pageAccessibilityLabel: String {
+        guard model.reflowable != nil else { return "Page \(model.currentPage + 1) of \(model.source.pageCount)" }
+        return "Chapter \(model.currentPage + 1) of \(model.source.pageCount), page \(model.globalPage) of \(model.totalPages)"
     }
 }
 
@@ -370,29 +390,53 @@ private struct OCRProgressPill: View {
 
 private struct PagePicker: View {
     let model: ReaderModel
-    @State private var value: Double = 0
+    @State private var value: Double = 1
     @State private var typed = ""
+    @FocusState private var fieldFocused: Bool
+
+    private var total: Int { max(1, model.totalPages) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(model.reflowable == nil ? "Page" : "Chapter") \(Int(value) + 1) of \(model.source.pageCount)")
+            Text("Page \(Int(value)) of \(model.pagesAreExact || model.reflowable == nil ? "" : "≈")\(total)")
                 .font(.headline).monospacedDigit()
-            Slider(value: $value, in: 0...Double(max(1, model.source.pageCount - 1)), step: 1) { editing in
-                if !editing { model.go(to: Int(value)) }
+            if let chapter = chapterTitle(forPage: Int(value)) {
+                Text(chapter).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Slider(value: $value, in: 1...Double(max(2, total)), step: 1) { editing in
+                if !editing { go(to: Int(value)) }
             }
             HStack {
-                TextField(model.reflowable == nil ? "Go to page" : "Go to chapter", text: $typed).keyboardType(.numberPad).textFieldStyle(.roundedBorder)
-                    .onSubmit(go)
-                Button("Go", action: go).buttonStyle(.borderedProminent)
+                TextField("Go to page", text: $typed)
+                    .keyboardType(.numberPad).textFieldStyle(.roundedBorder)
+                    .focused($fieldFocused)
+                    .onSubmit(goTyped)
+                Button("Go", action: goTyped).buttonStyle(.borderedProminent)
+                    .disabled(Int(typed) == nil)
+            }
+            if model.reflowable != nil && !model.pagesAreExact {
+                Text("Counting pages… numbers marked ≈ are estimates.").font(.caption).foregroundStyle(.secondary)
             }
         }
-        .onAppear { value = Double(model.currentPage) }
+        .onAppear { value = Double(model.reflowable == nil ? model.currentPage + 1 : model.globalPage) }
     }
 
-    private func go() {
+    private func chapterTitle(forPage page: Int) -> String? {
+        guard let book = model.reflowable, book.pageCount > 1 else { return nil }
+        let chapter = model.location(ofGlobalPage: page).chapter
+        return book.chapterTitles.indices.contains(chapter) ? book.chapterTitles[chapter] : nil
+    }
+
+    private func go(to page: Int) {
+        let page = min(max(1, page), total)
+        if model.reflowable == nil { model.go(to: page - 1) } else { model.go(toGlobalPage: page) }
+    }
+
+    private func goTyped() {
         guard let page = Int(typed) else { return }
-        model.go(to: page - 1)
-        value = Double(page - 1)
+        value = Double(min(max(1, page), total))
+        go(to: page)
+        fieldFocused = false
     }
 }
 

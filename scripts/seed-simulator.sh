@@ -8,6 +8,8 @@ LIB="$DATA/Documents/Books"
 rm -rf "$LIB"; mkdir -p "$LIB/Physics" "$LIB/Fiction"
 cp "$SRC/Thermodynamics.pdf" "$SRC/Thermodynamics.djvu" "$LIB/Physics/"
 cp "$SRC/Scanned.pdf" "$LIB/"
+[ -f "$SRC/Entropy (Wikipedia).webarchive" ] && cp "$SRC/Entropy (Wikipedia).webarchive" "$LIB/"
+[ -f "$SRC/Python 3.10 docs.chm" ] && cp "$SRC/Python 3.10 docs.chm" "$LIB/"
 cp "$SRC/Pride.epub" "$LIB/Fiction/Pride and Prejudice.epub"
 cp "$(dirname "$0")/../Packages/ReaderCore/Tests/ReaderCoreTests/Fixtures/sample.fb2" "$LIB/Fiction/Тепло и порядок.fb2"
 # Without an iCloud account the app uses Documents/Inbox; leave two books there for the sync test.

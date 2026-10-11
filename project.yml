@@ -62,6 +62,14 @@ targets:
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
             LSItemContentTypes: [org.idpf.epub-container]
+          - CFBundleTypeName: Web Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.apple.webarchive]
+          - CFBundleTypeName: Compiled HTML Help
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.microsoft.chm]
           - CFBundleTypeName: FictionBook
             CFBundleTypeRole: Viewer
             LSHandlerRank: Owner
@@ -72,6 +80,11 @@ targets:
             NSUbiquitousContainerIsDocumentScopePublic: true
             NSUbiquitousContainerName: Scriptorium
             NSUbiquitousContainerSupportedFolderLevels: Any
+        # Background import from the iCloud Inbox.
+        UIBackgroundModes: [fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.romadinov.reader.inbox.refresh
+          - com.romadinov.reader.inbox.import
         # Wi-Fi Transfer advertises itself over Bonjour.
         NSBonjourServices: [_http._tcp]
         UTImportedTypeDeclarations:
@@ -81,6 +94,12 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension: [djvu, djv]
               public.mime-type: [image/vnd.djvu, image/x-djvu]
+          - UTTypeIdentifier: com.microsoft.chm
+            UTTypeDescription: Compiled HTML Help
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [chm]
+              public.mime-type: [application/vnd.ms-htmlhelp]
           - UTTypeIdentifier: org.gribuser.fb2
             UTTypeDescription: FictionBook
             UTTypeConformsTo: [public.xml, public.data]

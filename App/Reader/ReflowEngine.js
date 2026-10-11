@@ -297,6 +297,20 @@
     return true;
   };
 
+  // Pages one chapter takes at the current size (used by the hidden measuring view).
+  // Waits for images, which change layout once decoded.
+  R.measure = async () => {
+    const sec = book().querySelector('.rchap');
+    if (!sec) return 0;
+    await Promise.all([...sec.querySelectorAll('img')].map((img) => (img.decode ? img.decode().catch(() => {}) : null)));
+    await new Promise((r) => requestAnimationFrame(() => r()));
+    if (paged()) {
+      const ext = extent(sec);
+      return Math.max(1, ext.end - ext.start + 1);
+    }
+    return Math.max(1, Math.ceil(sec.getBoundingClientRect().height / window.innerHeight));
+  };
+
   R.turnPage = (delta) => {
     if (paged()) {
       const w = pageWidth();

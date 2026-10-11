@@ -64,6 +64,12 @@ private struct FolderView: View {
                 .padding(24)
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if !library.autoImported.isEmpty {
+                ImportBanner(paths: library.autoImported) { library.autoImported = [] }
+                    .padding()
+            }
+        }
         .navigationTitle(isRoot ? "Library" : folder.name)
         .refreshable { await syncInbox() }
         .task(id: library.revision) { reload() }
@@ -84,7 +90,7 @@ private struct FolderView: View {
                 Button("Import", systemImage: "plus") { importing = true }
             }
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .djvu, .epub, .fb2, .zip],
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .djvu, .epub, .fb2, .zip, .webArchive, .chm],
                       allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { library.importFiles(urls, into: folder) }
         }
@@ -156,6 +162,31 @@ private struct FolderView: View {
 
     private func perform(_ action: () throws -> Void) {
         do { try action() } catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct ImportBanner: View {
+    let paths: [String]
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "icloud.and.arrow.down").font(.title3).foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Imported \(paths.count) book\(paths.count == 1 ? "" : "s") from your iCloud Inbox").font(.headline)
+                Text(paths.prefix(3).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
+                     + (paths.count > 3 ? " and \(paths.count - 3) more" : ""))
+                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer()
+            Button("Dismiss", systemImage: "xmark", action: onDismiss).labelStyle(.iconOnly).buttonStyle(.plain)
+        }
+        .padding(14)
+        .glassEffect(in: .rect(cornerRadius: 16))
+        .task(id: paths.count) {
+            try? await Task.sleep(for: .seconds(8))
+            onDismiss()
+        }
     }
 }
 

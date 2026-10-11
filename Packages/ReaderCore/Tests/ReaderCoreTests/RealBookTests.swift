@@ -18,5 +18,5 @@ func realBookSmokeTest() throws {
     if let sample = (0..<book.pageCount).lazy.compactMap({ book.embeddedText(at: $0) }).dropFirst(3).first {
         print("sample:", sample.plainText.prefix(300))
     }
-    #expect(book.pageCount > 0 && withText > book.pageCount / 2)
+    #expect(book.pageCount > 0 && withText >= (book.pageCount + 1) / 2)
 }

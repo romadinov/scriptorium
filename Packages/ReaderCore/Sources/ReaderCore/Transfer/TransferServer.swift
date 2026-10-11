@@ -149,7 +149,7 @@ public final class TransferServer: @unchecked Sendable {
     func acceptUpload(_ temp: URL, folder relative: String, name: String) throws -> String {
         let name = try Self.validName(name)
         guard DocumentOpener.canOpen(URL(fileURLWithPath: name)) else {
-            throw Failure.unsupported("Only PDF, DjVu, EPUB and FB2 files can be uploaded")
+            throw Failure.unsupported("Only PDF, DjVu, EPUB, FB2, CHM and web archive files can be uploaded")
         }
         let folder = try resolve(relative)
         var isDir: ObjCBool = false

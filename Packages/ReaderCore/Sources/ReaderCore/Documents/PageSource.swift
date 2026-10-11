@@ -78,7 +78,7 @@ public enum DocumentError: LocalizedError {
 
 public enum DocumentOpener {
     public static func canOpen(_ url: URL) -> Bool {
-        ["pdf", "djvu", "djv", "epub"].contains(url.pathExtension.lowercased()) || FB2Source.canOpen(url)
+        ["pdf", "djvu", "djv", "epub", "webarchive", "chm"].contains(url.pathExtension.lowercased()) || FB2Source.canOpen(url)
     }
 
     public static func open(_ url: URL) throws -> PageSource {
@@ -87,6 +87,8 @@ public enum DocumentOpener {
         case "pdf": return try PDFPageSource(url: url)
         case "djvu", "djv": return try DjVuPageSource(url: url)
         case "epub": return try EPUBSource(url: url)
+        case "webarchive": return try WebArchiveSource(url: url)
+        case "chm": return try CHMSource(url: url)
         case let ext: throw DocumentError.unsupportedFormat(ext)
         }
     }

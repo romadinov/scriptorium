@@ -9,6 +9,8 @@ final class ReaderFlowTests: XCTestCase {
     override func setUp() async throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        // Coordinate-based tests below assume vertical scrolling for PDF/DjVu; horizontal has its own test.
+        app.launchArguments += ["-pageTurning", name.contains("Horizontal") ? "horizontal" : "vertical"]
         app.launch()
     }
 
@@ -75,7 +77,7 @@ final class ReaderFlowTests: XCTestCase {
         snap("epub-1-open")
         XCTAssertTrue(appeared, "Chapter content never appeared")
         // The book reopens where it was left, so compare chapter numbers rather than assume chapter 1.
-        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Ch. '")).firstMatch
+        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chapter '")).firstMatch
         let before = chapterNumber(indicator.label)
         app.buttons["Next chapter"].tap()
         let advanced = NSPredicate { _, _ in self.chapterNumber(indicator.label) == before + 1 }
@@ -111,7 +113,7 @@ final class ReaderFlowTests: XCTestCase {
     func testEPUBPagesSwipeAcrossChaptersAndHighlightPersists() throws {
         openFolder("Fiction")
         open(bookMatching: "Тепло и порядок")   // small FB2: 4 chapters, quick to cross boundaries
-        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Ch. '")).firstMatch
+        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chapter '")).firstMatch
         XCTAssertTrue(indicator.waitForExistence(timeout: 15))
         sleep(2)
         snap("pages-1-open")
@@ -160,7 +162,7 @@ final class ReaderFlowTests: XCTestCase {
         app.buttons["Reading options"].tap()
         app.buttons["Scroll"].tap()
         sleep(3)
-        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Ch. '")).firstMatch
+        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chapter '")).firstMatch
         let start = chapterNumber(indicator.label)
         for _ in 0..<6 { app.webViews.firstMatch.swipeUp(velocity: .fast) }
         sleep(2)
@@ -196,18 +198,80 @@ final class ReaderFlowTests: XCTestCase {
     }
 
     /// scripts/seed-simulator.sh drops books into the (local fallback) Inbox, including a new folder.
-    func testInboxSyncImportsIntoFolders() throws {
-        let sync = app.buttons["Sync iCloud Inbox"]
-        XCTAssertTrue(sync.waitForExistence(timeout: 10))
-        sync.tap()
-        let alert = app.alerts["Inbox synced"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 20), "No sync result")
-        snap("inbox-1-result")
-        XCTAssertTrue(alert.staticTexts.matching(NSPredicate(format: "label CONTAINS '2 books imported'")).firstMatch.exists)
-        alert.buttons["OK"].tap()
+    /// They are imported automatically at launch; a manual sync afterwards finds the Inbox empty.
+    func testInboxAutoImportsIntoFolders() throws {
+        let banner = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Imported 2 books'")).firstMatch
+        XCTAssertTrue(banner.waitForExistence(timeout: 20), "No automatic import")
+        snap("inbox-1-auto-imported")
         openFolder("From Inbox")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Inbox Book'")).firstMatch.waitForExistence(timeout: 5))
-        snap("inbox-2-folder")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.buttons["Sync iCloud Inbox"].tap()
+        let alert = app.alerts["Inbox synced"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 20))
+        XCTAssertTrue(alert.staticTexts.matching(NSPredicate(format: "label CONTAINS 'The Inbox is empty'")).firstMatch.exists)
+        snap("inbox-2-manual-sync-empty")
+        alert.buttons["OK"].tap()
+    }
+
+    func testCHMOpensWithContents() throws {
+        open(bookMatching: "Python 3.10 docs")
+        XCTAssertTrue(app.buttons["Contents"].waitForExistence(timeout: 30))
+        app.buttons["Contents"].tap()
+        let tutorial = app.buttons.matching(NSPredicate(format: "label CONTAINS 'The Python Tutorial'")).firstMatch
+        XCTAssertTrue(tutorial.waitForExistence(timeout: 5))
+        tutorial.tap()
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Python'")).firstMatch
+            .waitForExistence(timeout: 20))
+        sleep(2)
+        snap("chm-1-tutorial")
+    }
+
+    func testWebArchiveOpens() throws {
+        open(bookMatching: "Entropy (Wikipedia)")
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'thermodynamic'")).firstMatch
+            .waitForExistence(timeout: 20), "Web archive text did not render")
+        sleep(2)
+        snap("webarchive-1")
+    }
+
+    func testHorizontalPagesForPDFAndDjVu() throws {
+        openFolder("Physics")
+        open(bookMatching: "DJVU")
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        XCTAssertEqual(indicator.label, "Page 1 of 3")
+        sleep(2)
+        snap("horizontal-1-djvu")
+        app.swipeLeft()
+        sleep(1)
+        XCTAssertEqual(indicator.label, "Page 2 of 3", "Swiping left did not turn to the next DjVu page")
+        snap("horizontal-2-djvu-page2")
+        app.swipeRight()
+        sleep(1)
+        XCTAssertEqual(indicator.label, "Page 1 of 3")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        sleep(2)
+        app.swipeLeft()
+        sleep(1)
+        XCTAssertEqual(indicator.label, "Page 2 of 3", "Swiping left did not turn to the next PDF page")
+        snap("horizontal-3-pdf-page2")
+
+        // Page picker: type a page number.
+        indicator.tap()
+        let field = app.textFields["Go to page"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("3\n")
+        sleep(1)
+        // The popover covers the toolbar; close it before reading the counter.
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+        XCTAssertEqual(indicator.label, "Page 3 of 3")
     }
 
     /// Opens Wi-Fi Transfer and holds it open; scripts/transfer-smoke.sh uploads meanwhile.
@@ -224,9 +288,9 @@ final class ReaderFlowTests: XCTestCase {
 
     // MARK: Helpers
 
-    /// "Ch. 3 / 9" → 3
+    /// "Chapter 3 of 9, page 34 of 480" → 3
     private func chapterNumber(_ label: String) -> Int {
-        Int(label.dropFirst(4).prefix { $0.isNumber }) ?? -1
+        Int(label.dropFirst("Chapter ".count).prefix { $0.isNumber }) ?? -1
     }
 
     private func openFolder(_ name: String) {

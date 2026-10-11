@@ -23,9 +23,19 @@ let package = Package(
                 .unsafeFlags(["-w"]),
             ]
         ),
+        // CHMLib 0.40 (LGPL-2.1), vendored unmodified.
+        .target(
+            name: "CCHMLib",
+            exclude: ["COPYING"],
+            cSettings: [
+                // pread is 64-bit on Apple platforms (no pread64), so CHM_USE_IO64 is not needed.
+                .define("CHM_MT"), .define("CHM_USE_PREAD"),
+                .unsafeFlags(["-w"]),
+            ]
+        ),
         .target(
             name: "ReaderCore",
-            dependencies: ["CDjVuLibre", .product(name: "ZIPFoundation", package: "ZIPFoundation")],
+            dependencies: ["CDjVuLibre", "CCHMLib", .product(name: "ZIPFoundation", package: "ZIPFoundation")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
