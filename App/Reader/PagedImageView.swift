@@ -250,6 +250,12 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate {
             guard let self, let cg, !Task.isCancelled else { return }
             let image = UIImage(cgImage: cg)
             self.image = image
+            // Live Text analysis is the expensive part. Run it once per page (the result is in page
+            // coordinates, so a sharper re-render after zooming keeps it), and only for pages the reader
+            // stays on, not every page flicked past.
+            guard !self.analyzed else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
             await self.analyze(image)
         }
     }
@@ -278,6 +284,8 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate {
         highlightLayers.forEach(layer.addSublayer)
     }
 
+    private var analyzed = false
+
     private func analyze(_ image: UIImage) async {
         guard ImageAnalyzer.isSupported else {
             log.error("ImageAnalyzer not supported on this device; Live Text selection disabled")
@@ -294,6 +302,7 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate {
         guard !Task.isCancelled else { return }
         log.debug("Live Text ready for page \(self.index), hasText=\(analysis.hasResults(for: .text))")
         interaction.analysis = analysis
+        analyzed = true
         // Must be set after the analysis, or the interaction ignores touches.
         interaction.preferredInteractionTypes = .textSelection
         // The app's own selection bar replaces VisionKit's corner Live Text button.

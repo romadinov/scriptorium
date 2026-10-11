@@ -30,6 +30,8 @@ final class Paginator: NSObject, WKNavigationDelegate {
         var cached = Self.cache[key] ?? [:]
         for (chapter, pages) in cached { onMeasured(chapter, pages) }
         guard cached.count < book.pageCount else { return }
+        // Measuring a whole book lays out every chapter; in Low Power Mode make do with chapter positions.
+        guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return }
 
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.addUserScript(
@@ -65,9 +67,10 @@ final class Paginator: NSObject, WKNavigationDelegate {
                                                                  contentWorld: .page)
                 guard !Task.isCancelled, let pages = (result as? NSNumber)?.intValue, pages > 0 else { continue }
                 cached[chapter] = pages
-                Self.cache[key] = cached
+                if cached.count % 10 == 0 { Self.cache[key] = cached }   // persist in batches, not per chapter
                 onMeasured(chapter, pages)
             }
+            Self.cache[key] = cached
             self.cancel()
         }
     }

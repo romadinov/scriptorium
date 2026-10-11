@@ -62,14 +62,15 @@ final class InboxWatcher {
             query.start()
             self.query = query
         } else {
-            // Local fallback (no iCloud account): a light poll is plenty.
-            poll = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            // Local fallback (no iCloud account): a light poll is plenty; the tolerance lets iOS batch wake-ups.
+            poll = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     if InboxSync.hasBooks(in: inbox) { self.scheduleImport() }
                 }
             }
         }
+        poll?.tolerance = 10
         log.debug("Watching inbox \(inbox.path, privacy: .public) (iCloud: \(isCloud))")
     }
 
@@ -126,9 +127,10 @@ enum InboxBackgroundImport {
 
     static func schedule() {
         let refresh = BGAppRefreshTaskRequest(identifier: refreshID)
-        refresh.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        refresh.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60)
         let processing = BGProcessingTaskRequest(identifier: processingID)
         processing.requiresNetworkConnectivity = true   // files may still need downloading from iCloud
+        processing.requiresExternalPower = true         // big imports wait for the charger
         processing.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
         for request in [refresh, processing] as [BGTaskRequest] {
             do { try BGTaskScheduler.shared.submit(request) } catch {
