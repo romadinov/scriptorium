@@ -577,6 +577,26 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(field.waitForNonExistence(timeout: 5), "Note was not saved")
     }
 
+    /// Recognising text while the PDF view is drawing must not crash (PDFKit documents aren't thread-safe).
+    func testRecognizeWhileScrollingPDF() throws {
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["Text"].waitForExistence(timeout: 10))
+        for _ in 0..<3 {
+            app.buttons["Text"].tap()
+            app.buttons["Recognize whole document"].tap()
+            for _ in 0..<4 {
+                app.swipeUp(velocity: .fast)
+                app.swipeDown(velocity: .fast)
+            }
+            app.buttons["Text"].tap()
+            app.buttons["Recognize text on this page"].tap()
+        }
+        sleep(3)
+        XCTAssertEqual(app.state, .runningForeground, "App crashed while recognising text")
+        snap("ocr-1-after")
+    }
+
     func testBookmarksAndSearch() throws {
         // Bookmark page 2 of the DjVu book, then find it from the library-wide view by searching.
         openFolder("Physics")

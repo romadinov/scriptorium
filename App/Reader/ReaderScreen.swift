@@ -484,7 +484,8 @@ private struct SelectionBar: View {
 
     private func buttons(showTitles: Bool) -> some View {
         HStack(spacing: 4) {
-            bar("Highlight", "highlighter", showTitles) { onHighlight(.yellow) }
+            // Always labelled: it's the main action on a selection and an icon alone is easy to miss.
+            bar("Highlight", "highlighter", true) { onHighlight(.yellow) }
                 .contextMenu {
                     ForEach(Highlight.Color.allCases, id: \.self) { color in
                         Button(color.rawValue.capitalized) { onHighlight(color) }

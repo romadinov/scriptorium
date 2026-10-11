@@ -4,27 +4,34 @@ import PDFKit
 
 /// PDF document. The app displays PDFs with `PDFView`; this source is used for
 /// thumbnails, OCR of scanned pages and extracting text for LLM context.
+///
+/// PDFKit documents are not thread-safe, and the on-screen `PDFView` draws `document` on the main
+/// thread. Background work (rendering for OCR/thumbnails, text extraction) therefore uses its own
+/// separate instance, `worker`, so the two never touch the same object concurrently.
 public final class PDFPageSource: PageSource, @unchecked Sendable {
     public let url: URL
+    /// For the UI (PDFView, outline, annotations) — main thread only.
     public let document: PDFDocument
+    /// Private copy for background rendering and text extraction, always used under `lock`.
+    private let worker: PDFDocument
     public private(set) lazy var outline: [OutlineItem] = document.outlineRoot.map { children(of: $0) } ?? []
-    private let lock = NSLock()
+    private let lock = NSRecursiveLock()
 
     public init(url: URL) throws {
-        guard let document = PDFDocument(url: url) else { throw DocumentError.cannotOpen(url) }
+        guard let document = PDFDocument(url: url), let worker = PDFDocument(url: url) else {
+            throw DocumentError.cannotOpen(url)
+        }
         self.url = url
         self.document = document
+        self.worker = worker
     }
 
-    public init(document: PDFDocument, url: URL) {
-        self.url = url
-        self.document = document
-    }
-
-    public var pageCount: Int { document.pageCount }
+    public var pageCount: Int { lock.withLock { worker.pageCount } }
 
     public func pageSize(at index: Int) -> CGSize {
-        guard let page = document.page(at: index) else { return .zero }
+        lock.lock()
+        defer { lock.unlock() }
+        guard let page = worker.page(at: index) else { return .zero }
         let box = page.bounds(for: .cropBox)
         return page.rotation % 180 == 0 ? box.size : CGSize(width: box.height, height: box.width)
     }
@@ -32,8 +39,9 @@ public final class PDFPageSource: PageSource, @unchecked Sendable {
     public func renderPage(at index: Int, maxPixelSize: Int) throws -> CGImage {
         lock.lock()
         defer { lock.unlock() }
-        guard let page = document.page(at: index) else { throw DocumentError.renderFailed(page: index) }
-        let size = pageSize(at: index)
+        guard let page = worker.page(at: index) else { throw DocumentError.renderFailed(page: index) }
+        let box = page.bounds(for: .cropBox)
+        let size = page.rotation % 180 == 0 ? box.size : CGSize(width: box.height, height: box.width)
         let scale = Double(maxPixelSize) / max(size.width, size.height)
         let target = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
         // `thumbnail` scales up as well as down and applies page rotation
@@ -50,7 +58,7 @@ public final class PDFPageSource: PageSource, @unchecked Sendable {
     public func embeddedText(at index: Int) -> PageText? {
         lock.lock()
         defer { lock.unlock() }
-        guard let text = document.page(at: index)?.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let text = worker.page(at: index)?.string?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else { return nil }
         // PDFView handles selection geometry itself, so only the text is needed here.
         let lines = text.components(separatedBy: .newlines).map { [PageText.Word(text: $0, rect: .zero)] }
