@@ -28,7 +28,13 @@ final class ReaderModel {
 
     var currentPage = 0
     /// Text currently selected in the viewer (PDFKit selection or Live Text selection).
-    var selection = ""
+    var selection = "" {
+        // The assistant keeps the last selection as the subject of questions: tapping into the question
+        // field takes focus from the book and clears the on-page selection, but the question is still about it.
+        didSet { if !selection.isEmpty { questionSelection = selection } }
+    }
+    /// What the assistant's questions are about, until cleared or replaced by a new selection.
+    var questionSelection = ""
     /// PDFs show in PDFKit; DjVu and scanned PDFs use the image viewer with Live Text.
     var imageMode: Bool
     var ocrProgress: Double?
@@ -393,8 +399,13 @@ final class ReaderModel {
             return
         }
         chat.notice = nil
-        let selection = action == .summarize ? "" : self.selection
-        let display = action.map { selection.isEmpty ? $0.title : "\($0.title): “\(selection.prefix(120))”" } ?? question
+        let selection = action == .summarize ? "" : questionSelection
+        let display = action.map { action in
+            guard !selection.isEmpty else { return action.title }
+            let separator = action.title.hasSuffix("?") ? " " : ": "
+            return "\(action.title)\(separator)“\(selection.prefix(120))”"
+        }
+            ?? (selection.isEmpty ? question : "“\(selection.prefix(80))\(selection.count > 80 ? "…" : "")” — \(question)")
         let prompt = action?.question(selection: selection, language: settings.llm.answerLanguage) ?? question
 
         // Re-send page context when the reader moved or selected something new since the last question.

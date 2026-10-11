@@ -509,6 +509,31 @@ final class ReaderFlowTests: XCTestCase {
         snap("ai-2-summary-with-context")
     }
 
+    func testTypedQuestionKeepsSelectionAndMeaningBubble() throws {
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["Assistant"].waitForExistence(timeout: 10))
+        sleep(2)
+        // Select a word, open the assistant, type in the field (which takes focus from the page).
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.235)).press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["Ask…"].waitForExistence(timeout: 5))
+        app.buttons["Ask…"].tap()
+        let field = app.textFields["Ask about the selection…"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Selection not attached to the question")
+        XCTAssertTrue(app.buttons["What does it mean?"].exists, "No default bubble")
+        field.tap()
+        field.typeText("Why is this here?\n")
+        let asked = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '“' AND label ENDSWITH '— Why is this here?'")).firstMatch
+        XCTAssertTrue(asked.waitForExistence(timeout: 5), "Typed question was sent without the selection")
+        waitForAnswer()
+        snap("meaning-1-typed")
+        // The bubble is still offered for follow-ups.
+        app.buttons["What does it mean?"].tap()
+        waitForAnswer()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'What does it mean? “'")).firstMatch.exists)
+        snap("meaning-2-bubble")
+    }
+
     func testBookmarksAndSearch() throws {
         // Bookmark page 2 of the DjVu book, then find it from the library-wide view by searching.
         openFolder("Physics")

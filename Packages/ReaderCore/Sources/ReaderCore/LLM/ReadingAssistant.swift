@@ -17,12 +17,13 @@ public struct ReadingContext: Sendable {
 
 /// Canned actions offered on a text selection.
 public enum QuickAction: String, CaseIterable, Identifiable, Sendable {
-    case explain, define, translate, summarize
+    case meaning, explain, define, translate, summarize
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
+        case .meaning: "What does it mean?"
         case .explain: "Explain"
         case .define: "Define in context"
         case .translate: "Translate"
@@ -32,6 +33,7 @@ public enum QuickAction: String, CaseIterable, Identifiable, Sendable {
 
     public var systemImage: String {
         switch self {
+        case .meaning: "questionmark.bubble"
         case .explain: "lightbulb"
         case .define: "character.book.closed"
         case .translate: "translate"
@@ -42,10 +44,11 @@ public enum QuickAction: String, CaseIterable, Identifiable, Sendable {
     public func question(selection: String?, language: String) -> String {
         let lang = language.isEmpty ? "English" : language
         switch self {
+        case .meaning: return "What does the selected text mean here? Explain it simply, in the context of the page."
         case .explain: return "Explain the selected passage in plain words. What does it mean here and why does it matter?"
         case .define: return "Define the selected word or phrase as it is used in this text. Give the meaning, part of speech, and a short example."
         case .translate: return "Translate the selected text into \(lang). Keep terminology accurate; add a brief note only if something is ambiguous."
-        case .summarize: return "Summarize the text in <page_text> in a few bullet points. Use only what it says; add nothing else."
+        case .summarize: return "Summarize the page text in a few bullet points. Use only what it says; add nothing else."
         }
     }
 }

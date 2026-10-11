@@ -57,7 +57,7 @@ struct AssistantPanel: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     if chat.turns.isEmpty {
-                        EmptyAssistant(hasSelection: !model.selection.isEmpty) { action in
+                        EmptyAssistant(hasSelection: !model.questionSelection.isEmpty) { action in
                             model.ask("", action: action, settings: settings)
                         }
                     }
@@ -75,21 +75,46 @@ struct AssistantPanel: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !model.selection.isEmpty {
+            if !model.questionSelection.isEmpty {
                 HStack(alignment: .top) {
                     Image(systemName: "text.quote").foregroundStyle(.secondary)
-                    Text(model.selection).lineLimit(3).font(.footnote).foregroundStyle(.secondary)
+                    Text(model.questionSelection).lineLimit(3).font(.footnote).foregroundStyle(.secondary)
                     Spacer()
-                    Button("Clear selection", systemImage: "xmark.circle.fill") { model.selection = "" }
+                    Button("Clear selection", systemImage: "xmark.circle.fill") {
+                        model.questionSelection = ""
+                        model.selection = ""
+                    }
                         .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
+            if !model.questionSelection.isEmpty && !chat.isStreaming {
+                // One-tap questions about the selection; "What does it mean?" is the default.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach([QuickAction.meaning, .explain, .translate]) { action in
+                            Button { model.ask("", action: action, settings: settings) } label: {
+                                Label(action.title, systemImage: action.systemImage).font(.callout)
+                            }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .tint(action == .meaning ? .accentColor : .secondary)
+                        }
+                    }
+                }
+            }
             HStack(alignment: .bottom) {
-                TextField(model.selection.isEmpty ? "Ask about page \(model.currentPage + 1)…" : "Ask about the selection…",
+                TextField(model.questionSelection.isEmpty ? "Ask about page \(model.currentPage + 1)…" : "Ask about the selection…",
                           text: $input, axis: .vertical)
                     .lineLimit(1...6)
                     .focused($inputFocused)
                     .onSubmit(send)
+                    // Multi-line fields insert a newline on Return instead of submitting; treat it as Send.
+                    .onChange(of: input) { _, text in
+                        if text.hasSuffix("\n") {
+                            input = String(text.dropLast())
+                            send()
+                        }
+                    }
                     .textFieldStyle(.roundedBorder)
                 if chat.isStreaming {
                     Button("Stop", systemImage: "stop.circle.fill") { chat.stop() }
