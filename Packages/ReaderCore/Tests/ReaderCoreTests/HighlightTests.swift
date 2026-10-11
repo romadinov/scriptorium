@@ -147,3 +147,17 @@ private func label(_ location: Highlight.Location) -> String {
     #expect(DeepLink(url: URL(string: "scriptorium://open?page=1")!) == nil)       // no document
     #expect(DeepLink(url: URL(string: "https://example.com")!) == nil)
 }
+
+@Test func improvementNotesAppendWithContextAndScreenshot() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString)/Improvement notes.md")
+    let notes = ImprovementNotes(file: file)
+    let png = Data([0x89, 0x50, 0x4E, 0x47])
+    let shot = try notes.add("Back pill should fade\nIt stays after I read on.", context: "Pride and Prejudice, p. 34",
+                             build: "1.0 (6)", device: "iPad Air", screenshot: png)
+    try notes.add("List rows too tall on iPhone", context: "Library", build: "1.0 (6)", device: "iPhone")
+    let text = try String(contentsOf: file, encoding: .utf8)
+    #expect(text.hasPrefix("Improvement notes:\n\t- Back pill should fade @date("))
+    #expect(text.contains("@where(Pride and Prejudice, p. 34) @build(1.0 [6]) @device(iPad Air) @screenshot(Improvement notes/Screenshot "))
+    #expect(text.contains("\n\t\tIt stays after I read on.\n\t- List rows too tall on iPhone"))
+    #expect(FileManager.default.fileExists(atPath: notes.attachmentsDirectory.appending(path: try #require(shot)).path))
+}

@@ -44,6 +44,7 @@ private struct FolderView: View {
     @State private var showNotes = false
     @State private var query = ""
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(ImprovementNoteRequest.self) private var noteRequest
     @AppStorage("libraryLayout") private var layout: LibraryLayout = .list
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 24)]
@@ -168,6 +169,7 @@ private struct FolderView: View {
                             layout = layout == .list ? .grid : .list
                         }
                         Divider()
+                        Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
                         Button("Settings", systemImage: "gearshape") { showSettings = true }
                     }
                 }
@@ -260,6 +262,7 @@ private struct FolderView: View {
                 }
                 Button("Read Later", systemImage: "text.badge.plus") { showReadLater = true }
                 Button("Bookmarks", systemImage: "bookmark") { showNotes = true }
+                Button("Suggest an Improvement", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if library.isSyncingInbox {
@@ -281,6 +284,10 @@ private struct FolderView: View {
         Button("Move to…", systemImage: "folder") { moving = [url] }
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { deleting = [url] }
+    }
+
+    private var noteContext: String {
+        isRoot ? "Library" : "Library › \(library.relativePath(folder.url))"
     }
 
     private var deleteTitle: String {

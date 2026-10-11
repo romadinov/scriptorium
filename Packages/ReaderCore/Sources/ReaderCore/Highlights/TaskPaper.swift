@@ -144,3 +144,59 @@ public struct ReadLaterList: Sendable {
         return result
     }
 }
+
+/// "Improvement notes.md" in iCloud Drive › Scriptorium (TaskPaper): ideas and problems noted while
+/// using the app, each with where it happened, the build and an optional screenshot. Append-only.
+public struct ImprovementNotes: Sendable {
+    public static let projectName = "Improvement notes"
+    public let file: URL
+
+    public init(file: URL) {
+        self.file = file
+    }
+
+    /// Screenshots go next to the file, in "Improvement notes/".
+    public var attachmentsDirectory: URL {
+        file.deletingLastPathComponent().appending(path: "Improvement notes")
+    }
+
+    /// Appends a note; returns the screenshot's file name if one was saved.
+    @discardableResult
+    public func add(_ text: String, context: String, build: String, device: String,
+                    screenshot: Data? = nil, date: Date = Date()) throws -> String? {
+        var attachment: String?
+        if let screenshot {
+            try FileManager.default.createDirectory(at: attachmentsDirectory, withIntermediateDirectories: true)
+            // Local time, as people see it ("Screenshot 2026-10-11 211529.png").
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd HHmmss"
+            let name = "Screenshot \(formatter.string(from: date)).png"
+            try screenshot.write(to: attachmentsDirectory.appending(path: name))
+            attachment = name
+        }
+
+        let lines = text.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines)
+        let first = lines.first ?? ""
+        var tags: [(String, String?)] = [("date", TaskPaper.date(date)), ("where", context), ("build", build), ("device", device)]
+        if let attachment { tags.append(("screenshot", "Improvement notes/\(attachment)")) }
+        var entry = TaskPaper.item(first, tags: tags)
+        let rest = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !rest.isEmpty { entry += "\n" + TaskPaper.note(rest) }
+
+        var inner: Error?
+        var coordinationError: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: file, options: .forMerging, error: &coordinationError) { url in
+            do {
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                var content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                if content.isEmpty { content = TaskPaper.project(Self.projectName) + "\n" }
+                if !content.hasSuffix("\n") { content += "\n" }
+                content += entry + "\n"
+                try Data(content.utf8).write(to: url, options: .atomic)
+            } catch { inner = error }
+        }
+        if let error = coordinationError ?? inner { throw error }
+        return attachment
+    }
+}

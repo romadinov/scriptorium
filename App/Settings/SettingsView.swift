@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var serverModels: [String] = []
     @State private var serverStatus: String?
     @State private var testing = false
+    @Environment(ImprovementNoteRequest.self) private var noteRequest
 
     private static let ocrLanguageChoices: [(String, String)] = [
         ("en-US", "English"), ("ru-RU", "Russian"), ("uk-UA", "Ukrainian"), ("de-DE", "German"),
@@ -68,6 +69,15 @@ struct SettingsView: View {
                     TextField("Answer language (e.g. English, Russian)", text: $settings.llm.answerLanguage)
                 } footer: {
                     Text("Used for answers and the Translate action. Leave empty to answer in the language you ask in.")
+                }
+
+                Section {
+                    Button("Suggest an Improvement…", systemImage: "lightbulb") {
+                        dismiss()
+                        Task { try? await Task.sleep(for: .milliseconds(400)); noteRequest.start(context: "Settings") }
+                    }
+                } footer: {
+                    Text("Notes are saved to iCloud Drive › Scriptorium › Improvement notes.md, with an optional screenshot.")
                 }
 
                 Section {

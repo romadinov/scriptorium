@@ -534,6 +534,49 @@ final class ReaderFlowTests: XCTestCase {
         snap("meaning-2-bubble")
     }
 
+    func testBackPillGoesAwayWhenReadingOn() throws {
+        openFolder("Fiction")
+        open(bookMatching: "Pride and Prejudice")
+        XCTAssertTrue(app.buttons["Contents"].waitForExistence(timeout: 15))
+        sleep(2)
+        app.buttons["Contents"].tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS 'CHAPTER V.'")).firstMatch.tap()
+        let back = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Back to'")).firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "No Back pill after a contents jump")
+        sleep(2)
+        // Read on: one page keeps it (maybe a peek), two pages from the landing page dismiss it.
+        app.webViews.firstMatch.swipeLeft()
+        sleep(1)
+        XCTAssertTrue(back.exists, "Back pill vanished after one page")
+        app.webViews.firstMatch.swipeLeft()
+        sleep(1)
+        snap("backpill-1-after-reading-on")
+        XCTAssertTrue(back.waitForNonExistence(timeout: 3), "Back pill did not go away after reading on")
+
+        // × closes it straight away.
+        app.buttons["Contents"].tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS 'CHAPTER II.'")).firstMatch.tap()
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        app.buttons["Forget"].tap()
+        XCTAssertTrue(back.waitForNonExistence(timeout: 3), "× did not close the Back pill")
+    }
+
+    func testImprovementNoteFromReader() throws {
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
+        sleep(1)
+        app.buttons["More"].tap()
+        app.buttons["Suggest an Improvement…"].tap()
+        let field = app.textFields["What could be better? Bugs, ideas, wishes…"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Note form did not open")
+        field.typeText("Test note from UI test")
+        XCTAssertTrue(app.switches["Attach screenshot"].exists)
+        snap("note-1-form")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5), "Note was not saved")
+    }
+
     func testBookmarksAndSearch() throws {
         // Bookmark page 2 of the DjVu book, then find it from the library-wide view by searching.
         openFolder("Physics")

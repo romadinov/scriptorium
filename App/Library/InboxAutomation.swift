@@ -16,6 +16,13 @@ enum InboxLocation {
         return base.appending(path: "Read Later.md")
     }
 
+    /// iCloud Drive › Scriptorium › Improvement notes.md (or the local Documents fallback).
+    static func improvementNotesFile() -> URL {
+        let base = ICloudFiles.documentsDirectory(containerIdentifier: containerIdentifier)
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return base.appending(path: "Improvement notes.md")
+    }
+
     /// Blocks while iCloud resolves the container — call off the main thread.
     static func resolve() -> (url: URL, isCloud: Bool) {
         if let documents = ICloudFiles.documentsDirectory(containerIdentifier: containerIdentifier) {

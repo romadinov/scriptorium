@@ -36,6 +36,9 @@ a dictionary, highlights that sync through iCloud, a folder library and Wi-Fi up
   *iCloud Drive › Scriptorium › Read Later.md* (TaskPaper format: `- title @url(…) @from(book, p. N) @added(date)`),
   and the list is also in the library. The app only appends to that file, so you can mark items `@done` or
   rearrange them in TaskPaper.
+- **Improvement notes**: "Suggest an Improvement…" (library, reader ⋯, Settings) appends a note to
+  *iCloud Drive › Scriptorium › Improvement notes.md* (TaskPaper), tagged with where it was written, the build
+  and the device, plus an optional screenshot in *Improvement notes/*.
 - **Highlights**: four colours, a list per book, and tap a highlight to recolour, remove or ask about it.
   They are stored in iCloud Drive as readable TaskPaper-style text, in *iCloud Drive › Scriptorium › Highlights › <Book>.md*:
   the book is a project, and each highlight is a `- text @location(…) @date(…) @color(…)` item.

@@ -25,6 +25,7 @@
 		A6B1A96CE5F461CA9136E455 /* ReadAloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EF6C34659EAE99694BF514 /* ReadAloud.swift */; };
 		A6E2A29AD3656CC4B3B146C2 /* ReaderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D50ED6D61D0776BC7B432C9 /* ReaderModel.swift */; };
 		B6239842E4B6C50E3BC038A6 /* ReaderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1B699B6763846BB7FEBB14 /* ReaderScreen.swift */; };
+		E7821B425F9698114A14BD57 /* ImprovementNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD87E2359E2F26EEA6FFF06A /* ImprovementNoteView.swift */; };
 		F724DA519FFC3D85D1BE9716 /* ReflowableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1780E587DDBB8C98CC62E2D9 /* ReflowableView.swift */; };
 		FDD5C79E1E0062CE5F4B3915 /* AssistantPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F57DB8D01F9BCB39C0B60A7B /* AssistantPanel.swift */; };
 /* End PBXBuildFile section */
@@ -55,6 +56,7 @@
 		90EF6C34659EAE99694BF514 /* ReadAloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAloud.swift; sourceTree = "<group>"; };
 		91665D257827EDB0F9C72846 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C0063B8777CB5A098250F91B /* ReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderApp.swift; sourceTree = "<group>"; };
+		CD87E2359E2F26EEA6FFF06A /* ImprovementNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImprovementNoteView.swift; sourceTree = "<group>"; };
 		D2B2A2361D253EFE3731B80B /* ReflowEngine.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = ReflowEngine.js; sourceTree = "<group>"; };
 		DA9BA2F91E0F0D03E70F5F7B /* HorizontalPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HorizontalPageView.swift; sourceTree = "<group>"; };
 		DC6877D995357715B462C891 /* ReaderCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ReaderCore; path = Packages/ReaderCore; sourceTree = SOURCE_ROOT; };
@@ -125,6 +127,7 @@
 		A7AA8FA0E0746B2C19DFFEC7 /* Library */ = {
 			isa = PBXGroup;
 			children = (
+				CD87E2359E2F26EEA6FFF06A /* ImprovementNoteView.swift */,
 				8AD8F32EB58A2CD39C018AD3 /* InboxAutomation.swift */,
 				4123ECE629C6D7E255BCAD7B /* LibraryStore.swift */,
 				72FE652A71E0B2A8A29CEA01 /* LibraryView.swift */,
@@ -266,6 +269,7 @@
 			files = (
 				FDD5C79E1E0062CE5F4B3915 /* AssistantPanel.swift in Sources */,
 				504EACE05584958991444333 /* HorizontalPageView.swift in Sources */,
+				E7821B425F9698114A14BD57 /* ImprovementNoteView.swift in Sources */,
 				351579D63B17292D3610BEBE /* InboxAutomation.swift in Sources */,
 				3A45199EF3F2536475D82A80 /* LibraryStore.swift in Sources */,
 				078E7C19E2B1C96248E4E77B /* LibraryView.swift in Sources */,
@@ -466,7 +470,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;
@@ -488,7 +492,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;

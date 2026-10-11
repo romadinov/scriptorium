@@ -63,6 +63,7 @@ private struct ReaderContent: View {
     @AppStorage("pageTurning") private var turning: PageTurning = .horizontal
     @State private var showHighlights = false
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(ImprovementNoteRequest.self) private var noteRequest
 
     /// iPhone (and narrow iPad split view): fewer toolbar buttons, panels as sheets.
     private var compact: Bool { sizeClass == .compact }
@@ -109,6 +110,7 @@ private struct ReaderContent: View {
             }
         }
         .animation(.snappy, value: model.backStack.count)
+        .onChange(of: model.readingPageNumber) { model.noteReadingPosition() }
         .onDisappear { model.readAloud.stop() }
         .navigationTitle(model.book.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -256,7 +258,16 @@ private struct ReaderContent: View {
                     .frame(minWidth: 360, minHeight: 440)
                 }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
+            Menu("More", systemImage: "ellipsis.circle") {
+                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
+            }
         }
+    }
+
+    /// Where an improvement note was written: book, format, page and view mode.
+    private var noteContext: String {
+        let mode = model.reflowable != nil ? effectiveLayout.title : (model.imageMode ? "Live Text" : turning.title)
+        return "\(model.book.title) (\(model.book.format)), \(model.currentPosition.label), \(mode)"
     }
 
     /// On iPhone these panels are sheets on the root view (the iPad popovers hang off toolbar buttons).
@@ -286,6 +297,7 @@ private struct ReaderContent: View {
                     if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
                 }
                 Button("Highlights & Bookmarks", systemImage: "highlighter") { showHighlights = true }
+                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
                         Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1, remember: false) }
@@ -569,8 +581,10 @@ private struct BackPill: View {
             }
             .buttonStyle(.plain)
             Button("Forget", systemImage: "xmark", action: onDismiss)
-                .labelStyle(.iconOnly).font(.caption).foregroundStyle(.secondary)
-                .padding(.trailing, 12).padding(.vertical, 9)
+                .labelStyle(.iconOnly).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+                .padding(.trailing, 4)
                 .buttonStyle(.plain)
         }
         .glassEffect(in: .capsule)

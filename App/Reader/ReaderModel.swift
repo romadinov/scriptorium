@@ -239,10 +239,34 @@ final class ReaderModel {
         guard backStack.last != here else { return }
         backStack.append(here)
         if backStack.count > 30 { backStack.removeFirst() }
+        awaitingLanding = true
+        landingPage = nil
+    }
+
+    /// Page number used to tell whether the reader has moved on after a jump.
+    var readingPageNumber: Int { reflowable == nil ? currentPage + 1 : globalPage }
+
+    @ObservationIgnored private var landingPage: Int?
+    @ObservationIgnored private var awaitingLanding = false
+
+    /// Called on every page change. The first change after a jump is where the reader landed; once they
+    /// read on two pages from there, "Back" is no longer wanted and the stack is dropped (as in Books).
+    func noteReadingPosition() {
+        guard !backStack.isEmpty else { return }
+        let page = readingPageNumber
+        if awaitingLanding || landingPage == nil {
+            landingPage = page
+            awaitingLanding = false
+        } else if let landing = landingPage, abs(page - landing) >= 2 {
+            backStack = []
+            landingPage = nil
+        }
     }
 
     func goBack() {
         guard let target = backStack.popLast() else { return }
+        awaitingLanding = true
+        landingPage = nil
         if reflowable != nil, let jumpToPosition {
             jumpToPosition(target.page, target.progress)
         } else {

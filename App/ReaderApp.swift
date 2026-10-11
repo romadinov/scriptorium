@@ -16,12 +16,18 @@ struct ReaderApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var library = LibraryStore()
     @State private var settings = SettingsStore()
+    @State private var noteRequest = ImprovementNoteRequest()
 
     var body: some Scene {
+        @Bindable var noteRequest = noteRequest
         WindowGroup {
             LibraryView()
                 .environment(library)
                 .environment(settings)
+                .environment(noteRequest)
+                .sheet(item: $noteRequest.pending) { pending in
+                    ImprovementNoteView(context: pending.context, screenshot: pending.screenshot)
+                }
                 .onOpenURL { url in
                     if let link = DeepLink(url: url) {
                         Task { await library.open(link) }
