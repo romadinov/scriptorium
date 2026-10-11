@@ -29,11 +29,19 @@ a dictionary, highlights that sync through iCloud, a folder library and Wi-Fi up
   - **On-device**: Apple Intelligence (FoundationModels). Offline and private.
   - **Local server**: Ollama, LM Studio or any OpenAI-compatible endpoint on your Mac or PC over Wi-Fi.
   - **Claude**: the Anthropic API, using your own key, stored in the Keychain.
+- **Back after jumps**: after following an internal link (EPUB/FB2/CHM/web archive links and footnotes, PDF
+  links), the contents list or "go to page", a **← Back to p. N** button returns to where you were, one step
+  per tap.
+- **Read Later**: long-press any web link in a book and choose **Add to Read Later**. Links are collected in
+  *iCloud Drive › Scriptorium › Read Later.md* (TaskPaper format: `- title @url(…) @from(book, p. N) @added(date)`),
+  and the list is also in the library. The app only appends to that file, so you can mark items `@done` or
+  rearrange them in TaskPaper.
 - **Highlights**: four colours, a list per book, and tap a highlight to recolour, remove or ask about it.
-  They are stored in iCloud Drive as readable Markdown, in *iCloud Drive › Scriptorium › Highlights › <Book>.md*.
+  They are stored in iCloud Drive as readable TaskPaper-style text, in *iCloud Drive › Scriptorium › Highlights › <Book>.md*:
+  the book is a project, and each highlight is a `- text @location(…) @date(…) @color(…)` item.
   The data used to place them goes in a JSON file per book, keyed by a content fingerprint, so highlights follow
   the book across renames, moves and devices.
-- **Library**: folders with rename / move / delete; reading position is remembered. Supported files can be
+- **Library**: a list by default (or a grid); folders with rename / move / delete; reading position is remembered. Supported files can be
   opened from other apps ("Open in Scriptorium").
 - **iCloud Inbox** (iPad): *iCloud Drive › Scriptorium › Inbox* mirrors the library's folders. Drop books into any
   folder from your Mac or another device:

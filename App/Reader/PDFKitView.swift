@@ -10,7 +10,12 @@ struct PDFKitView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
     func makeUIView(context: Context) -> PDFView {
-        let view = PDFView()
+        let view = LinkTrackingPDFView()
+        view.onLinkJump = { [weak model] fromPage in
+            guard let model else { return }
+            model.currentPage = fromPage
+            model.pushCurrentPosition()
+        }
         view.document = model.pdfDocument
         if turning == .horizontal {
             // Book-like: one page per screen, swipe left/right.
@@ -123,5 +128,19 @@ struct PDFKitView: UIViewRepresentable {
             model.clearSelection = nil
             model.revealHighlight = nil
         }
+    }
+}
+
+/// PDFKit follows internal links (contents pages, footnotes, cross-references) on its own;
+/// this reports each such jump with the page the reader was on, for the Back button.
+final class LinkTrackingPDFView: PDFView {
+    var onLinkJump: ((Int) -> Void)?
+
+    override func go(to destination: PDFDestination) {
+        // Only real jumps: broken links (no target page) must not leave a Back entry behind.
+        if let page = currentPage, let target = destination.page, let document, target != page {
+            onLinkJump?(document.index(for: page))
+        }
+        super.go(to: destination)
     }
 }

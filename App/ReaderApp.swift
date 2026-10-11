@@ -23,7 +23,11 @@ struct ReaderApp: App {
                 .environment(library)
                 .environment(settings)
                 .onOpenURL { url in
-                    if let book = library.importFiles([url]).first { library.open(book) }
+                    if let link = DeepLink(url: url) {
+                        Task { await library.open(link) }
+                    } else if let book = library.importFiles([url]).first {
+                        library.open(book)
+                    }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {

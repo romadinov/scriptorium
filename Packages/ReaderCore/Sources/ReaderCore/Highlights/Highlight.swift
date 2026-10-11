@@ -62,24 +62,63 @@ public struct Highlight: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// All highlights for one document, as stored in iCloud.
+/// A bookmarked place: a page (fixed layout) or a chapter + position within it (reflowable).
+public struct Bookmark: Codable, Hashable, Identifiable, Sendable {
+    public var id: UUID
+    public var page: Int
+    public var progress: Double
+    /// As shown when it was made, e.g. "p. 12".
+    public var label: String
+    /// The first words on the page, so bookmarks are recognisable and searchable.
+    public var snippet: String
+    public var created: Date
+
+    public init(id: UUID = UUID(), page: Int, progress: Double = 0, label: String, snippet: String, created: Date = Date()) {
+        self.id = id
+        self.page = page
+        self.progress = progress
+        self.label = label
+        self.snippet = snippet
+        self.created = created
+    }
+}
+
+/// All highlights and bookmarks for one document, as stored in iCloud.
 public struct BookHighlights: Codable, Sendable, Equatable {
     public var documentID: String
     public var title: String
     public var fileName: String
+    /// Library-relative path when last saved — a hint for finding the book again (the fingerprint decides).
+    public var path: String?
     public var highlights: [Highlight]
+    public var bookmarks: [Bookmark]
     /// IDs deleted on any device; kept so a merge with an older copy doesn't resurrect them.
     public var deleted: Set<UUID>
     public var updated: Date
 
-    public init(documentID: String, title: String, fileName: String,
-                highlights: [Highlight] = [], deleted: Set<UUID> = [], updated: Date = Date()) {
+    public init(documentID: String, title: String, fileName: String, path: String? = nil,
+                highlights: [Highlight] = [], bookmarks: [Bookmark] = [], deleted: Set<UUID> = [], updated: Date = Date()) {
         self.documentID = documentID
         self.title = title
         self.fileName = fileName
+        self.path = path
         self.highlights = highlights
+        self.bookmarks = bookmarks
         self.deleted = deleted
         self.updated = updated
+    }
+
+    // Files written before bookmarks existed lack those keys.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        documentID = try c.decode(String.self, forKey: .documentID)
+        title = try c.decode(String.self, forKey: .title)
+        fileName = try c.decode(String.self, forKey: .fileName)
+        path = try c.decodeIfPresent(String.self, forKey: .path)
+        highlights = try c.decodeIfPresent([Highlight].self, forKey: .highlights) ?? []
+        bookmarks = try c.decodeIfPresent([Bookmark].self, forKey: .bookmarks) ?? []
+        deleted = try c.decodeIfPresent(Set<UUID>.self, forKey: .deleted) ?? []
+        updated = try c.decodeIfPresent(Date.self, forKey: .updated) ?? Date()
     }
 
     /// Union of both sides by id, minus anything either side deleted. Sorted in reading order.
@@ -89,6 +128,11 @@ public struct BookHighlights: Codable, Sendable, Equatable {
         var byID = Dictionary(highlights.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         for h in other.highlights where byID[h.id] == nil { byID[h.id] = h }
         result.highlights = byID.values.filter { !result.deleted.contains($0.id) }.sorted(by: Self.readingOrder)
+        var marks = Dictionary(bookmarks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for b in other.bookmarks where marks[b.id] == nil { marks[b.id] = b }
+        result.bookmarks = marks.values.filter { !result.deleted.contains($0.id) }
+            .sorted { ($0.page, $0.progress) < ($1.page, $1.progress) }
+        result.path = path ?? other.path
         result.updated = max(updated, other.updated)
         return result
     }
@@ -106,19 +150,61 @@ public struct BookHighlights: Codable, Sendable, Equatable {
         return a.created < b.created
     }
 
-    /// Human-readable export, written next to the data as "<Title>.md".
+    /// Human-readable export ("<Title>.md") in TaskPaper style: the book is a project, each highlight
+    /// an item tagged with where it is, when it was made and its colour; notes are indented below.
     public func markdown(locationLabel: (Highlight.Location) -> String) -> String {
-        let date = Date.FormatStyle(date: .abbreviated, time: .omitted)
-        var out = "# \(title)\n\n"
-        out += "_\(fileName)_ · \(highlights.count) highlight\(highlights.count == 1 ? "" : "s") · updated \(updated.formatted(date))\n"
-        for h in highlights {
-            let quote = h.text.split(separator: "\n", omittingEmptySubsequences: false).map { "> \($0)" }.joined(separator: "\n")
-            out += "\n\(quote)\n\n— \(locationLabel(h.location)) · \(h.created.formatted(date))"
-            if h.color != .yellow { out += " · \(h.color.rawValue)" }
-            out += "\n"
-            if let note = h.note, !note.isEmpty { out += "\n\(note)\n" }
+        var lines = [TaskPaper.project(title)]
+        lines.append(TaskPaper.note("\(fileName) · \(highlights.count) highlight\(highlights.count == 1 ? "" : "s") · updated \(TaskPaper.date(updated))", indent: 1))
+        for b in bookmarks {
+            let link = DeepLink(documentID: documentID, page: b.page, progress: b.progress).url.absoluteString
+            lines.append(TaskPaper.item("Bookmark: \(b.snippet)", tags: [("bookmark", nil), ("location", b.label),
+                                                                         ("date", TaskPaper.date(b.created)), ("open", link)]))
         }
-        return out
+        for h in highlights {
+            var tags: [(String, String?)] = [("location", locationLabel(h.location)), ("date", TaskPaper.date(h.created))]
+            if h.color != .yellow { tags.append(("color", h.color.rawValue)) }
+            tags.append(("open", DeepLink(documentID: documentID, page: h.location.pageIndex, highlightID: h.id).url.absoluteString))
+            lines.append(TaskPaper.item(h.text, tags: tags))
+            if let note = h.note, !note.isEmpty { lines.append(TaskPaper.note(note)) }
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+}
+
+/// `scriptorium://open?doc=<fingerprint>&page=<n>&progress=<0…1>&highlight=<uuid>` — opens a book at a place.
+public struct DeepLink: Equatable, Sendable {
+    public static let scheme = "scriptorium"
+    public var documentID: String
+    public var page: Int
+    public var progress: Double
+    public var highlightID: UUID?
+
+    public init(documentID: String, page: Int, progress: Double = 0, highlightID: UUID? = nil) {
+        self.documentID = documentID
+        self.page = page
+        self.progress = progress
+        self.highlightID = highlightID
+    }
+
+    public init?(url: URL) {
+        guard url.scheme == Self.scheme, url.host() == "open",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              let doc = items.first(where: { $0.name == "doc" })?.value, !doc.isEmpty else { return nil }
+        func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+        documentID = doc
+        page = value("page").flatMap(Int.init) ?? 0
+        progress = value("progress").flatMap(Double.init) ?? 0
+        highlightID = value("highlight").flatMap(UUID.init(uuidString:))
+    }
+
+    public var url: URL {
+        var c = URLComponents()
+        c.scheme = Self.scheme
+        c.host = "open"
+        c.queryItems = [URLQueryItem(name: "doc", value: documentID), URLQueryItem(name: "page", value: String(page))]
+        if progress > 0 { c.queryItems?.append(URLQueryItem(name: "progress", value: String(format: "%.4f", progress))) }
+        if let highlightID { c.queryItems?.append(URLQueryItem(name: "highlight", value: highlightID.uuidString)) }
+        return c.url!
     }
 }
 

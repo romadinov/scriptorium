@@ -3,6 +3,13 @@ import Observation
 import PDFKit
 import ReaderCore
 
+/// A place to return to after following a link or jumping elsewhere.
+struct ReadingPosition: Equatable {
+    let page: Int          // page (fixed layout) or chapter (reflowable)
+    let progress: Double   // position within a reflowable chapter
+    let label: String      // "p. 12"
+}
+
 struct SubPage: Equatable {
     let page: Int
     let pages: Int
@@ -81,6 +88,7 @@ final class ReaderModel {
 
     func go(toGlobalPage page: Int) {
         guard reflowable != nil else { return go(to: page - 1) }
+        pushCurrentPosition()
         let target = location(ofGlobalPage: page)
         if let jumpToPosition {
             jumpToPosition(target.chapter, target.progress)
@@ -88,6 +96,11 @@ final class ReaderModel {
             jumpToPage?(target.chapter)
         }
     }
+
+    /// Where "Back" returns to, most recent last.
+    private(set) var backStack: [ReadingPosition] = []
+
+    var bookmarks: [Bookmark] = []
 
     // Highlights
     var highlights: [Highlight] = []
@@ -140,11 +153,59 @@ final class ReaderModel {
         return probe.allSatisfy { source.embeddedText(at: $0) == nil }
     }
 
-    func go(to page: Int) {
+    /// - Parameter remember: false for step-wise moves (chapter arrows) that don't belong in the back stack.
+    func go(to page: Int, remember: Bool = true) {
         let page = min(max(0, page), source.pageCount - 1)
+        if remember { pushCurrentPosition() }
         jumpToPage?(page)
         currentPage = page
     }
+
+    // MARK: Read Later
+
+    func addToReadLater(url: URL, title: String?) {
+        let source = "\(book.title), \(currentPosition.label)"
+        let name = (title?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (url.host().map { $0 + url.path() } ?? url.absoluteString)
+        Task {
+            let added = await Task.detached(priority: .userInitiated) {
+                let list = ReadLaterList(file: InboxLocation.readLaterFile())
+                return try? list.add(.init(title: name, url: url.absoluteString, source: source))
+            }.value
+            switch added {
+            case true?: statusMessage = "Added to Read Later"
+            case false?: statusMessage = "Already in Read Later"
+            case nil: statusMessage = "Couldn't save to Read Later"
+            }
+        }
+    }
+
+    // MARK: Back stack
+
+    var currentPosition: ReadingPosition {
+        let label = reflowable == nil ? "p. \(currentPage + 1)" : "p. \(globalPage)"
+        return ReadingPosition(page: currentPage, progress: pageProgress, label: label)
+    }
+
+    /// Remembers where the reader is before a jump (link, contents, page number).
+    func pushCurrentPosition() {
+        let here = currentPosition
+        guard backStack.last != here else { return }
+        backStack.append(here)
+        if backStack.count > 30 { backStack.removeFirst() }
+    }
+
+    func goBack() {
+        guard let target = backStack.popLast() else { return }
+        if reflowable != nil, let jumpToPosition {
+            jumpToPosition(target.page, target.progress)
+        } else {
+            jumpToPage?(target.page)
+            currentPage = target.page
+        }
+    }
+
+    func clearBackStack() { backStack = [] }
 
     // MARK: Highlights
 
@@ -156,6 +217,7 @@ final class ReaderModel {
         let stored = await highlightStore.load(documentID: id)
         highlightBook = stored ?? BookHighlights(documentID: id, title: book.title, fileName: book.url.lastPathComponent)
         highlights = highlightBook?.highlights ?? []
+        bookmarks = highlightBook?.bookmarks ?? []
         highlightLocationDescription = await highlightStore.textFolderDescription
     }
 
@@ -214,13 +276,69 @@ final class ReaderModel {
         }
     }
 
+    // MARK: Bookmarks
+
+    /// 1-based page (whole book for reflowable) a bookmark points at.
+    func page(of bookmark: Bookmark) -> Int {
+        guard reflowable != nil else { return bookmark.page + 1 }
+        let pages = chapterPages
+        guard pages.indices.contains(bookmark.page) else { return 1 }
+        return pages[..<bookmark.page].reduce(0, +) + Int((bookmark.progress * Double(max(0, pages[bookmark.page] - 1))).rounded()) + 1
+    }
+
+    var currentBookmark: Bookmark? {
+        bookmarks.first { reflowable == nil ? $0.page == currentPage : page(of: $0) == globalPage }
+    }
+
+    func toggleBookmark() async {
+        if let existing = currentBookmark {
+            highlightBook?.bookmarks.removeAll { $0.id == existing.id }
+            highlightBook?.deleted.insert(existing.id)
+        } else {
+            let snippet = await pageSnippet()
+            let mark = Bookmark(page: currentPage, progress: reflowable == nil ? 0 : pageProgress,
+                                label: currentPosition.label, snippet: snippet)
+            highlightBook?.bookmarks.append(mark)
+        }
+        bookmarks = highlightBook?.bookmarks ?? []
+        await persistHighlights()
+    }
+
+    func removeBookmark(_ bookmark: Bookmark) async {
+        highlightBook?.bookmarks.removeAll { $0.id == bookmark.id }
+        highlightBook?.deleted.insert(bookmark.id)
+        bookmarks = highlightBook?.bookmarks ?? []
+        await persistHighlights()
+    }
+
+    func open(_ bookmark: Bookmark) {
+        pushCurrentPosition()
+        if reflowable != nil, let jumpToPosition {
+            jumpToPosition(bookmark.page, bookmark.progress)
+        } else {
+            jumpToPage?(bookmark.page)
+            currentPage = bookmark.page
+        }
+    }
+
+    /// First words on the current page, so a bookmark is recognisable in lists and searchable.
+    private func pageSnippet() async -> String {
+        var text: String?
+        if let visibleText { text = await visibleText() }
+        if text?.isEmpty ?? true { text = await self.text.availableText(page: currentPage)?.plainText }
+        let words = (text ?? "").split(whereSeparator: \.isWhitespace).prefix(18).joined(separator: " ")
+        return words.isEmpty ? "Page \(currentPosition.label)" : words + ((text?.count ?? 0) > words.count ? "…" : "")
+    }
+
     private func persistHighlights() async {
-        guard let book = highlightBook else { return }
+        guard var book = highlightBook else { return }
+        book.path = String(self.book.url.standardizedFileURL.path.dropFirst(LibraryStore.rootURL.path.count + 1))
         let titles = reflowable?.chapterTitles
         do {
             let merged = try await highlightStore.save(book) { Self.label($0, chapterTitles: titles) }
             highlightBook = merged
             highlights = merged.highlights
+            bookmarks = merged.bookmarks
         } catch {
             statusMessage = "Couldn't save highlights: \(error.localizedDescription)"
         }

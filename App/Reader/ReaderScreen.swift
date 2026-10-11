@@ -29,6 +29,14 @@ struct ReaderScreen: View {
                 openError = error.localizedDescription
             }
         }
+        .task(id: model == nil) {
+            // Arrived through a highlight link: show it once the viewer has laid out.
+            guard let model, let id = library.pendingHighlight,
+                  let highlight = model.highlights.first(where: { $0.id == id }) else { return }
+            library.pendingHighlight = nil
+            try? await Task.sleep(for: .seconds(1))
+            model.reveal(highlight)
+        }
         .onChange(of: model?.currentPage) { _, page in
             if let page { library.setLastPage(page, for: book) }
         }
@@ -85,6 +93,15 @@ private struct ReaderContent: View {
             .padding(.horizontal)
             .animation(.snappy, value: model.selection.isEmpty)
         }
+        .overlay(alignment: .top) {
+            if let back = model.backStack.last {
+                BackPill(label: back.label, depth: model.backStack.count,
+                         onBack: { model.goBack() }, onDismiss: { model.clearBackStack() })
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: model.backStack.count)
         .navigationTitle(model.book.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
@@ -143,7 +160,7 @@ private struct ReaderContent: View {
                     }
             }
             if model.reflowable != nil && model.source.pageCount > 1 {
-                Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1) }
+                Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1, remember: false) }
                     .disabled(model.currentPage == 0)
             }
             Button(pageLabel) { showPagePicker = true }
@@ -153,7 +170,7 @@ private struct ReaderContent: View {
                     PagePicker(model: model).padding().frame(width: 320)
                 }
             if model.reflowable != nil && model.source.pageCount > 1 {
-                Button("Next chapter", systemImage: "chevron.right") { model.go(to: model.currentPage + 1) }
+                Button("Next chapter", systemImage: "chevron.right") { model.go(to: model.currentPage + 1, remember: false) }
                     .disabled(model.currentPage >= model.source.pageCount - 1)
             }
         }
@@ -188,12 +205,19 @@ private struct ReaderContent: View {
                     }
                 }
             }
+            Button(model.currentBookmark == nil ? "Bookmark this page" : "Remove bookmark",
+                   systemImage: model.currentBookmark == nil ? "bookmark" : "bookmark.fill") {
+                Task { await model.toggleBookmark() }
+            }
             Button("Highlights", systemImage: "highlighter") { showHighlights = true }
                 .popover(isPresented: $showHighlights) {
-                    HighlightsList(model: model) { highlight in
+                    HighlightsList(model: model, onSelect: { highlight in
                         showHighlights = false
                         model.reveal(highlight)
-                    }
+                    }, onSelectBookmark: { bookmark in
+                        showHighlights = false
+                        model.open(bookmark)
+                    })
                     .frame(minWidth: 360, minHeight: 440)
                 }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
@@ -220,9 +244,60 @@ private struct ReaderContent: View {
 private struct HighlightsList: View {
     let model: ReaderModel
     let onSelect: (Highlight) -> Void
+    let onSelectBookmark: (Bookmark) -> Void
+    @State private var tab = 0
 
     var body: some View {
         NavigationStack {
+            VStack(spacing: 0) {
+                Picker("Show", selection: $tab) {
+                    Text("Highlights").tag(0)
+                    Text("Bookmarks").tag(1)
+                }
+                .pickerStyle(.segmented).padding([.horizontal, .top])
+                if tab == 0 { highlightList } else { bookmarkList }
+            }
+            .navigationTitle("Notes")
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                if !model.highlightLocationDescription.isEmpty {
+                    Text("Saved as text in \(model.highlightLocationDescription)")
+                        .font(.footnote).foregroundStyle(.secondary).padding(8)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var bookmarkList: some View {
+        if model.bookmarks.isEmpty {
+            ContentUnavailableView("No bookmarks yet", systemImage: "bookmark",
+                                   description: Text("Tap the bookmark button to mark the current page."))
+        } else {
+            List {
+                ForEach(model.bookmarks) { bookmark in
+                    Button { onSelectBookmark(bookmark) } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "bookmark.fill").foregroundStyle(.tint)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("p. \(model.page(of: bookmark))").font(.headline)
+                                Text(bookmark.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .onDelete { offsets in
+                    let doomed = offsets.map { model.bookmarks[$0] }
+                    Task { for b in doomed { await model.removeBookmark(b) } }
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var highlightList: some View {
             Group {
                 if model.highlights.isEmpty {
                     ContentUnavailableView("No highlights yet", systemImage: "highlighter",
@@ -250,15 +325,6 @@ private struct HighlightsList: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("Highlights")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .bottom) {
-                if !model.highlightLocationDescription.isEmpty {
-                    Text("Saved as text in \(model.highlightLocationDescription)")
-                        .font(.footnote).foregroundStyle(.secondary).padding(8)
-                }
-            }
-        }
     }
 }
 
@@ -352,6 +418,29 @@ private struct TitleAndIconOrIcon: LabelStyle {
         } else {
             configuration.icon
         }
+    }
+}
+
+private struct BackPill: View {
+    let label: String
+    let depth: Int
+    let onBack: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: onBack) {
+                Label(depth > 1 ? "Back to \(label) (\(depth))" : "Back to \(label)", systemImage: "arrow.uturn.backward")
+                    .font(.callout.weight(.medium))
+                    .padding(.leading, 14).padding(.vertical, 9)
+            }
+            .buttonStyle(.plain)
+            Button("Forget", systemImage: "xmark", action: onDismiss)
+                .labelStyle(.iconOnly).font(.caption).foregroundStyle(.secondary)
+                .padding(.trailing, 12).padding(.vertical, 9)
+                .buttonStyle(.plain)
+        }
+        .glassEffect(in: .capsule)
     }
 }
 

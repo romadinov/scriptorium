@@ -28,6 +28,7 @@ struct ReflowableView: UIViewRepresentable {
 
         let webView = ReaderWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .systemBackground
         webView.isInspectable = true
@@ -68,7 +69,7 @@ struct ReflowableView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let model: ReaderModel
         let book: ReflowableSource
         let layout: ReflowLayout
@@ -247,6 +248,42 @@ struct ReflowableView: UIViewRepresentable {
             return (location, text)
         }
 
+        // MARK: Long-press on links
+
+        func webView(_ webView: WKWebView, contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
+                     completionHandler: @escaping @MainActor (UIContextMenuConfiguration?) -> Void) {
+            guard let url = elementInfo.linkURL else { return completionHandler(nil) }
+            Task { [weak self] in
+                // The link's own text makes a better Read Later title than its URL.
+                let title = try? await webView.callAsyncJavaScript(
+                    "return [...document.links].find(a => a.href === u)?.innerText ?? null",
+                    arguments: ["u": url.absoluteString], contentWorld: .page) as? String
+                let external = !url.isFileURL
+                completionHandler(UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+                    var actions: [UIMenuElement] = []
+                    if external {
+                        actions.append(UIAction(title: "Add to Read Later", image: UIImage(systemName: "text.badge.plus")) { _ in
+                            self?.model.addToReadLater(url: url, title: title)
+                        })
+                    }
+                    actions.append(UIAction(title: "Open", image: UIImage(systemName: external ? "safari" : "arrow.right")) { _ in
+                        if external {
+                            UIApplication.shared.open(url)
+                        } else if let self, let chapter = self.book.chapterIndex(for: url) {
+                            self.model.pushCurrentPosition()
+                            self.go(to: chapter, progress: 0, fragment: url.fragment)
+                        }
+                    })
+                    if external {
+                        actions.append(UIAction(title: "Copy Link", image: UIImage(systemName: "doc.on.doc")) { _ in
+                            UIPasteboard.general.url = url
+                        })
+                    }
+                    return UIMenu(title: title ?? url.absoluteString, children: actions)
+                })
+            }
+        }
+
         // MARK: Messages from the page
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -271,7 +308,10 @@ struct ReflowableView: UIViewRepresentable {
             case "link":
                 guard let href = body["href"] as? String, let url = URL(string: href) else { return }
                 if url.isFileURL {
-                    if let chapter = book.chapterIndex(for: url) { go(to: chapter, progress: 0, fragment: url.fragment) }
+                    if let chapter = book.chapterIndex(for: url) {
+                        model.pushCurrentPosition()
+                        go(to: chapter, progress: 0, fragment: url.fragment)
+                    }
                 } else {
                     UIApplication.shared.open(url)
                 }

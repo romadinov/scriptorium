@@ -7,6 +7,7 @@ DATA=$(xcrun simctl get_app_container "$DEVICE" com.romadinov.reader data)
 LIB="$DATA/Documents/Books"
 rm -rf "$LIB"; mkdir -p "$LIB/Physics" "$LIB/Fiction"
 cp "$SRC/Thermodynamics.pdf" "$SRC/Thermodynamics.djvu" "$LIB/Physics/"
+[ -f "$SRC/Linked.pdf" ] && cp "$SRC/Linked.pdf" "$LIB/Physics/Linked.pdf"
 cp "$SRC/Scanned.pdf" "$LIB/"
 [ -f "$SRC/Entropy (Wikipedia).webarchive" ] && cp "$SRC/Entropy (Wikipedia).webarchive" "$LIB/"
 [ -f "$SRC/Python 3.10 docs.chm" ] && cp "$SRC/Python 3.10 docs.chm" "$LIB/"

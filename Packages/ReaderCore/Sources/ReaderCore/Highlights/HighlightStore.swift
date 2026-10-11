@@ -64,12 +64,29 @@ public actor HighlightStore {
         try coordinatedWrite(encoder.encode(merged), to: url)
 
         let markdownURL = textDirectory.appending(path: Self.fileSafe(merged.title) + ".md")
-        if merged.highlights.isEmpty {
+        if merged.highlights.isEmpty && merged.bookmarks.isEmpty {
             try? coordinatedDelete(markdownURL)
         } else {
             try coordinatedWrite(Data(merged.markdown(locationLabel: locationLabel).utf8), to: markdownURL)
         }
         return merged
+    }
+
+    /// Every book's highlights and bookmarks (for the all-bookmarks view and search).
+    public func allBooks() -> [BookHighlights] {
+        _ = resolveBackend()
+        let files = (try? FileManager.default.contentsOfDirectory(at: dataDirectory, includingPropertiesForKeys: nil)) ?? []
+        return files.compactMap { url -> BookHighlights? in
+            var name = url.lastPathComponent
+            var target = url
+            if name.hasPrefix("."), name.hasSuffix(".icloud") {          // not downloaded yet
+                name = String(name.dropFirst().dropLast(7))
+                target = url.deletingLastPathComponent().appending(path: name)
+                try? FileManager.default.startDownloadingUbiquitousItem(at: target)
+            }
+            guard name.hasSuffix(".json") else { return nil }
+            return coordinatedRead(target)
+        }
     }
 
     public var textFolderDescription: String {

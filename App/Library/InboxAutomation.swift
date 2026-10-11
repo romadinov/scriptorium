@@ -9,6 +9,13 @@ private let log = Logger(subsystem: "com.romadinov.reader", category: "Inbox")
 enum InboxLocation {
     static let containerIdentifier = "iCloud.com.romadinov.reader"
 
+    /// iCloud Drive › Scriptorium › Read Later.md (or On My iPad › Scriptorium › Read Later.md).
+    static func readLaterFile() -> URL {
+        let base = ICloudFiles.documentsDirectory(containerIdentifier: containerIdentifier)
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return base.appending(path: "Read Later.md")
+    }
+
     /// Blocks while iCloud resolves the container — call off the main thread.
     static func resolve() -> (url: URL, isCloud: Bool) {
         if let documents = ICloudFiles.documentsDirectory(containerIdentifier: containerIdentifier) {

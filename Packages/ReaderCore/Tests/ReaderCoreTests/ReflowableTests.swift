@@ -48,6 +48,9 @@ func fb2ConvertsSectionsNotesAndCover(name: String) throws {
     let ch1 = try #require(book.embeddedText(at: 1)).plainText
     #expect(ch1.contains("Энтропия не убывает"))
     #expect(ch1.contains("S = k log W"))
+    let ch1HTML = try String(contentsOf: book.chapterURL(at: 1), encoding: .utf8)
+    #expect(ch1HTML.contains(#"<a class="note" href="notes0.html#n1">1</a>"#))      // footnote is a real link
+    #expect(book.chapterIndex(for: book.contentRoot.appending(path: "notes0.html")) == 3)
     let html = try String(contentsOf: book.chapterURL(at: 2), encoding: .utf8)
     #expect(html.contains("Строка один<br/>Строка два"))
     #expect(html.contains("<img src=\"img/cover.png.png\" alt=\"\"/>"))

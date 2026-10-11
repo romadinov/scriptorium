@@ -25,7 +25,8 @@ public final class FB2Source: ReflowableSource, @unchecked Sendable {
         self.url = url
         contentRoot = BookCache.directory(for: url, kind: "Books")
         let manifestURL = contentRoot.appending(path: "book.json")
-        if let data = try? Data(contentsOf: manifestURL), let manifest = try? JSONDecoder().decode(Manifest.self, from: data) {
+        if let data = try? Data(contentsOf: manifestURL), let manifest = try? JSONDecoder().decode(Manifest.self, from: data),
+           manifest.version == Manifest.currentVersion {
             apply(manifest)
             return
         }
@@ -71,6 +72,9 @@ public final class FB2Source: ReflowableSource, @unchecked Sendable {
             var children: [Entry]
         }
 
+        /// Bump when conversion changes so cached books are converted again.
+        static let currentVersion = 2
+        var version: Int? = currentVersion
         var title: String?
         var chapterFiles: [String]
         var chapterTitles: [String]
@@ -124,11 +128,18 @@ public final class FB2Source: ReflowableSource, @unchecked Sendable {
         let notes = bodies.filter { $0 !== main }
         guard let main else { throw DocumentError.cannotOpen(directory) }
 
-        let renderer = HTMLRenderer(images: images)
+        // Footnote targets live in the notes body(ies); links to them point at that chapter file.
+        var noteFile: [String: String] = [:]
+        for (index, body) in notes.enumerated() {
+            for section in body.descendants("section") {
+                if let id = section.attribute("id") { noteFile[id] = "notes\(index).html" }
+            }
+        }
+        let renderer = HTMLRenderer(images: images, noteFile: noteFile)
         var files: [String] = [], titles: [String] = [], outline: [Manifest.Entry] = []
 
-        func addChapter(title: String, html: String) throws {
-            let name = "ch\(files.count).html"
+        func addChapter(title: String, html: String, name fixedName: String? = nil) throws {
+            let name = fixedName ?? "ch\(files.count).html"
             let page = """
             <!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8"/><title>\(title.htmlEscaped)</title></head>
             <body>\(html)</body></html>
@@ -151,13 +162,14 @@ public final class FB2Source: ReflowableSource, @unchecked Sendable {
             try addChapter(title: title, html: renderer.render(section, depth: 1))
             outline.append(Manifest.Entry(title: title, page: page, children: subOutline(section, page: page)))
         }
-        for body in notes {
+        for (index, body) in notes.enumerated() {
             let title = body.child("title")?.text ?? "Notes"
             outline.append(Manifest.Entry(title: title, page: files.count, children: []))
-            try addChapter(title: title, html: body.elements.map { renderer.render($0, depth: 1) }.joined())
+            try addChapter(title: title, html: body.elements.map { renderer.render($0, depth: 1) }.joined(),
+                           name: "notes\(index).html")
         }
 
-        return Manifest(title: bookTitle, chapterFiles: files, chapterTitles: titles,
+        return Manifest(version: Manifest.currentVersion, title: bookTitle, chapterFiles: files, chapterTitles: titles,
                         cover: coverID.flatMap { images[$0] }, outline: outline)
     }
 
@@ -172,6 +184,8 @@ public final class FB2Source: ReflowableSource, @unchecked Sendable {
 /// FB2 element tree → HTML.
 private struct HTMLRenderer {
     let images: [String: String]
+    /// Footnote id → chapter file holding it.
+    let noteFile: [String: String]
 
     func render(_ element: XElement, depth: Int) -> String {
         let inner = { (d: Int) -> String in
@@ -185,7 +199,9 @@ private struct HTMLRenderer {
             return out
         }
         switch element.name {
-        case "section": return "<section>\(inner(depth + 1))</section>"
+        case "section":
+            let id = element.attribute("id").map { " id=\"\($0.htmlEscaped)\"" } ?? ""
+            return "<section\(id)>\(inner(depth + 1))</section>"
         case "title": return "<h\(min(depth + 1, 6)) class=\"title\">\(element.elements.map { $0.text.htmlEscaped }.joined(separator: "<br/>"))</h\(min(depth + 1, 6))>"
         case "subtitle": return "<h5 class=\"subtitle\">\(inner(depth))</h5>"
         case "p": return "<p>\(inner(depth))</p>"
@@ -202,6 +218,10 @@ private struct HTMLRenderer {
         case "text-author": return "<p class=\"author\">\(inner(depth))</p>"
         case "a":
             let label = inner(depth)
+            let target = element.attribute("href").map { String($0.drop { $0 == "#" }) }
+            if let target, let file = noteFile[target] {
+                return "<sup><a class=\"note\" href=\"\(file)#\(target.htmlEscaped)\">\(label)</a></sup>"
+            }
             return element.attribute("type") == "note" ? "<sup>\(label)</sup>" : label
         case "image":
             let id = element.attribute("href").map { String($0.drop { $0 == "#" }) } ?? ""

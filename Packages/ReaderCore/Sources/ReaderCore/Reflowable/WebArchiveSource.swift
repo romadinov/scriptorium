@@ -17,6 +17,9 @@ public final class WebArchiveSource: ReflowableSource, @unchecked Sendable {
     private let textLock = NSLock()
     private var cachedText: PageText??
 
+    /// Bump when conversion changes so already-opened archives are converted again.
+    static let converterVersion = "2"
+
     struct Resource {
         var url: URL?
         var data: Data
@@ -31,6 +34,7 @@ public final class WebArchiveSource: ReflowableSource, @unchecked Sendable {
         let manifest = contentRoot.appending(path: "archive.json")
         if let data = try? Data(contentsOf: manifest),
            let info = try? JSONDecoder().decode([String: String].self, from: data),
+           info["converter"] == Self.converterVersion,
            FileManager.default.fileExists(atPath: page.path) {
             title = info["title"]
             coverURL = info["cover"].map { contentRoot.appending(path: $0) }
@@ -66,6 +70,7 @@ public final class WebArchiveSource: ReflowableSource, @unchecked Sendable {
         var html = Self.decode(main)
         let base = main.url ?? URL(string: "about:blank")!
         html = Self.stripScripts(html)
+        html = Self.fixImages(html, base: base, local: local)
         html = Self.rewriteHTML(html, base: base, local: local)
         try Data(html.utf8).write(to: page)
 
@@ -76,7 +81,7 @@ public final class WebArchiveSource: ReflowableSource, @unchecked Sendable {
             .max { $0.data.count < $1.data.count }
             .flatMap { local[Self.key($0.url!)] }
             .map { contentRoot.appending(path: $0) }
-        var info: [String: String] = [:]
+        var info: [String: String] = ["converter": Self.converterVersion]
         info["title"] = title
         info["cover"] = coverURL.map { String($0.path.dropFirst(contentRoot.path.count + 1)) }
         try JSONEncoder().encode(info).write(to: manifest)
@@ -151,6 +156,66 @@ public final class WebArchiveSource: ReflowableSource, @unchecked Sendable {
         return out
     }
 
+    /// Archives hold only the image sizes the browser actually downloaded, and lazy-loading pages keep
+    /// the real address in data-* attributes that scripts would have swapped in. Make every <img> point at
+    /// an archived file and drop <picture> alternatives that weren't archived, so nothing renders blank.
+    static func fixImages(_ html: String, base: URL, local: [String: String]) -> String {
+        func localPath(_ value: String) -> String? {
+            let trimmed = value.trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: "&amp;", with: "&").replacingOccurrences(of: "&#38;", with: "&")
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("data:"),
+                  let absolute = URL(string: trimmed, relativeTo: base)?.absoluteURL else { return nil }
+            return local[key(absolute)]
+        }
+        func attributes(_ tag: String) -> [String: String] {
+            let regex = try! NSRegularExpression(pattern: "([a-zA-Z_:-]+)\\s*=\\s*([\"'])(.*?)\\2", options: .dotMatchesLineSeparators)
+            let ns = tag as NSString
+            var out: [String: String] = [:]
+            for m in regex.matches(in: tag, range: NSRange(location: 0, length: ns.length)) {
+                out[ns.substring(with: m.range(at: 1)).lowercased()] = ns.substring(with: m.range(at: 3))
+            }
+            return out
+        }
+        /// Local files among srcset candidates, keeping their width/density descriptors.
+        func localCandidates(_ srcset: String?) -> [String] {
+            (srcset ?? "").split(separator: ",").compactMap { candidate in
+                let parts = candidate.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
+                guard let first = parts.first, let path = localPath(String(first)) else { return nil }
+                return ([path] + parts.dropFirst().map(String.init)).joined(separator: " ")
+            }
+        }
+        func strip(_ tag: String, _ names: [String]) -> String {
+            names.reduce(tag) { result, name in
+                result.replacingOccurrences(of: "\\s\(name)\\s*=\\s*([\"']).*?\\1", with: "",
+                                            options: [.regularExpression, .caseInsensitive])
+            }
+        }
+
+        // <source> inside <picture>: keep only archived candidates; drop the element if there are none.
+        var out = replace(try! NSRegularExpression(pattern: "<source\\b[^>]*>", options: .caseInsensitive), in: html) { m, ns in
+            let tag = ns.substring(with: m.range)
+            let attrs = attributes(tag)
+            let candidates = localCandidates(attrs["srcset"] ?? attrs["data-srcset"])
+            guard !candidates.isEmpty else { return "" }
+            return strip(tag, ["srcset", "data-srcset"]).replacingOccurrences(of: "<source", with: "<source srcset=\"\(candidates.joined(separator: ", "))\"",
+                                                                              options: .caseInsensitive)
+        }
+        out = replace(try! NSRegularExpression(pattern: "<img\\b[^>]*>", options: .caseInsensitive), in: out) { m, ns in
+            let tag = ns.substring(with: m.range)
+            let attrs = attributes(tag)
+            let candidates = localCandidates(attrs["srcset"]) + localCandidates(attrs["data-srcset"])
+            let source = [attrs["src"], attrs["data-src"], attrs["data-lazy-src"], attrs["data-original"]]
+                .compactMap { $0 }.compactMap(localPath).first
+                ?? candidates.first.map { String($0.split(separator: " ").first!) }
+            guard let source else { return nil }   // nothing archived for this image — leave it
+            var fixed = strip(tag, ["src", "srcset", "data-src", "data-srcset", "data-lazy-src", "data-original", "loading"])
+            let srcset = candidates.isEmpty ? "" : " srcset=\"\(candidates.joined(separator: ", "))\""
+            fixed = fixed.replacingOccurrences(of: "<img", with: "<img src=\"\(source)\"\(srcset)", options: .caseInsensitive)
+            return fixed
+        }
+        return out
+    }
+
     /// Rewrites src/href/poster/srcset attributes and inline CSS url()s to the local copies.
     static func rewriteHTML(_ html: String, base: URL, local: [String: String]) -> String {
         func resolve(_ value: String) -> String? {
@@ -171,7 +236,9 @@ public final class WebArchiveSource: ReflowableSource, @unchecked Sendable {
         out = replace(srcset, in: out) { match, ns in
             let candidates = ns.substring(with: match.range(at: 3)).split(separator: ",").map { candidate -> String in
                 let parts = candidate.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
-                guard let first = parts.first, let path = resolve(String(first)) else { return String(candidate) }
+                guard let first = parts.first, let path = resolve(String(first)) else {
+                    return candidate.trimmingCharacters(in: .whitespaces)
+                }
                 return ([path] + parts.dropFirst().map(String.init)).joined(separator: " ")
             }
             return ns.substring(with: match.range(at: 1)) + ns.substring(with: match.range(at: 2))

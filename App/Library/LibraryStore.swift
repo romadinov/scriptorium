@@ -222,6 +222,70 @@ final class LibraryStore {
 
     func open(_ book: Book) { path.append(.book(book)) }
 
+    /// Highlight to scroll to once the book opened by a deep link has loaded.
+    var pendingHighlight: UUID?
+    /// Shown when a deep link names a book that isn't on this device.
+    var missingBookMessage: String?
+
+    /// Opens a `scriptorium://open?…` link.
+    func open(_ link: DeepLink) async {
+        guard let book = await locate(documentID: link.documentID, pathHint: nil) else {
+            missingBookMessage = "That book isn't in the library on this device. Import it (or sync the Inbox) and try again."
+            return
+        }
+        pendingHighlight = link.highlightID
+        open(book, page: link.page, progress: link.progress)
+    }
+
+    /// Opens a book at a given place (from the all-bookmarks view).
+    func open(_ book: Book, page: Int, progress: Double) {
+        setLastPage(page, for: book)
+        setLastProgress(progress, for: book)
+        path = [.book(book)]
+    }
+
+    // MARK: Search and lookup
+
+    /// Every book in the library, all folders.
+    func allBooks() -> [Book] {
+        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil,
+                                                              options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+        return enumerator.compactMap { $0 as? URL }.filter(DocumentOpener.canOpen).map(Book.init(url:))
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    func search(_ query: String) -> [Book] {
+        let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        return allBooks().filter { book in
+            let name = relativePath(book.url)
+            return terms.allSatisfy { name.localizedStandardContains($0) }
+        }
+    }
+
+    /// Finds a book by content fingerprint (survives renames/moves); the stored path is tried first.
+    func locate(documentID: String, pathHint: String?) async -> Book? {
+        var candidates = allBooks()
+        if let pathHint, let hinted = candidates.firstIndex(where: { relativePath($0.url) == pathHint }) {
+            candidates.insert(candidates.remove(at: hinted), at: 0)
+        }
+        var cache = UserDefaults.standard.dictionary(forKey: "fingerprints") as? [String: String] ?? [:]
+        defer { UserDefaults.standard.set(cache, forKey: "fingerprints") }
+        for book in candidates {
+            let values = try? book.url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            let key = "\(relativePath(book.url))|\(values?.fileSize ?? 0)|\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0)"
+            let id: String?
+            if let cached = cache[key] {
+                id = cached
+            } else {
+                let url = book.url
+                id = await Task.detached(priority: .userInitiated) { try? DocumentFingerprint.id(for: url) }.value
+                cache[key] = id
+            }
+            if id == documentID { return book }
+        }
+        return nil
+    }
+
     // MARK: Reading position
 
     func lastPage(_ book: Book) -> Int {

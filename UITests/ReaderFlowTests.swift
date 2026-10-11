@@ -274,6 +274,111 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertEqual(indicator.label, "Page 3 of 3")
     }
 
+    func testBackAfterFollowingLinks() throws {
+        // FB2 footnote → Notes chapter → Back.
+        openFolder("Fiction")
+        open(bookMatching: "Тепло и порядок")
+        XCTAssertTrue(app.buttons["Contents"].waitForExistence(timeout: 10))
+        app.buttons["Contents"].tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS 'Глава первая'")).firstMatch.tap()
+        let footnote = app.webViews.links["1"]
+        XCTAssertTrue(footnote.waitForExistence(timeout: 10), "Footnote link not rendered")
+        // Contents navigation itself pushed a position; clear it so we test the link alone.
+        if app.buttons["Forget"].waitForExistence(timeout: 2) { app.buttons["Forget"].tap() }
+        footnote.tap()
+        let back = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Back to'")).firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "No Back button after following a link")
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Во втором начале'")).firstMatch
+            .waitForExistence(timeout: 5), "Footnote text not shown")
+        snap("back-1-fb2-footnote")
+        back.tap()
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Больцман'")).firstMatch
+            .waitForExistence(timeout: 5), "Back did not return to the chapter")
+        XCTAssertFalse(back.exists)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        // PDF internal link (page 1 → 3) → Back.
+        openFolder("Physics")
+        open(bookMatching: "Linked")
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        sleep(2)
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.13)).tap()
+        let appeared = back.waitForExistence(timeout: 5)
+        sleep(1)
+        snap("back-2-pdf-link")
+        XCTAssertTrue(appeared, "No Back button after a PDF link")
+        XCTAssertEqual(indicator.label, "Page 3 of 3")
+        back.tap()
+        sleep(1)
+        XCTAssertEqual(indicator.label, "Page 1 of 3")
+    }
+
+    func testReadLaterFromLongPressedLink() throws {
+        open(bookMatching: "Entropy (Wikipedia)")
+        let link = app.webViews.links.matching(NSPredicate(format: "label == 'microstates'")).firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 20), "Link not found")
+        link.press(forDuration: 1.2)
+        let add = app.buttons["Add to Read Later"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5), "No link menu")
+        snap("readlater-1-menu")
+        add.tap()
+        XCTAssertTrue(app.staticTexts["Added to Read Later"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.buttons["Read Later"].tap()
+        let entry = app.buttons.matching(NSPredicate(format: "label CONTAINS 'microstates'")).firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "Entry not listed")
+        snap("readlater-2-list")
+    }
+
+    func testBookmarksAndSearch() throws {
+        // Bookmark page 2 of the DjVu book, then find it from the library-wide view by searching.
+        openFolder("Physics")
+        open(bookMatching: "DJVU")
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        indicator.tap()
+        let field = app.textFields["Go to page"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("2\n")
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        // Bookmarks persist (and sync) between runs: start from an unbookmarked page.
+        if app.buttons["Remove bookmark"].waitForExistence(timeout: 2) {
+            app.buttons["Remove bookmark"].tap()
+            XCTAssertTrue(app.buttons["Bookmark this page"].waitForExistence(timeout: 5), "Bookmark was not removed")
+        }
+        app.buttons["Bookmark this page"].tap()
+        XCTAssertTrue(app.buttons["Remove bookmark"].waitForExistence(timeout: 5), "Bookmark icon did not fill")
+        snap("bookmarks-1-marked")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.buttons["Bookmarks"].tap()
+        let search = app.searchFields["Search bookmarks and books"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("Thermodynamics")
+        let entry = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'p. 2'")).firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "Bookmark not found by search")
+        snap("bookmarks-2-all")
+        entry.tap()
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        XCTAssertEqual(indicator.label, "Page 2 of 3", "Bookmark did not open its page")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        // File-name search across folders.
+        let librarySearch = app.searchFields["Search all books"]
+        XCTAssertTrue(librarySearch.waitForExistence(timeout: 5))
+        librarySearch.tap()
+        librarySearch.typeText("тепло")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Тепло и порядок'")).firstMatch
+            .waitForExistence(timeout: 5), "File-name search failed")
+        snap("search-1-files")
+    }
+
     /// Opens Wi-Fi Transfer and holds it open; scripts/transfer-smoke.sh uploads meanwhile.
     func testWiFiTransferScreen() throws {
         app.buttons["Wi-Fi Transfer"].firstMatch.tap()
