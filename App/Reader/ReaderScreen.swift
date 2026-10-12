@@ -62,6 +62,7 @@ private struct ReaderContent: View {
     @AppStorage("reflowLayout") private var layout: ReflowLayout = .paged
     @AppStorage("pageTurning") private var turning: PageTurning = .horizontal
     @State private var showHighlights = false
+    @State private var confirmRemovePageNote = false
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(ImprovementNoteRequest.self) private var noteRequest
 
@@ -94,7 +95,8 @@ private struct ReaderContent: View {
                         onAsk: { showAssistant = true },
                         onDictionary: { dictionaryTerm = DictionaryTerm(text: model.selection) },
                         onTranslate: { showTranslation = true },
-                        onHighlight: { color in Task { await model.addHighlight(color: color) } })
+                        onHighlight: { color in Task { await model.addHighlight(color: color) } },
+                        onNote: { Task { await model.annotateSelection() } })
                 }
             }
             .padding(.bottom, 20)
@@ -102,12 +104,21 @@ private struct ReaderContent: View {
             .animation(.snappy, value: model.selection.isEmpty)
         }
         .overlay(alignment: .top) {
-            if let back = model.backStack.last {
-                BackPill(label: back.label, depth: model.backStack.count,
-                         onBack: { model.goBack() }, onDismiss: { model.clearBackStack() })
-                    .padding(.top, 12)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+            // Centred under the title: near the trailing toolbar buttons their touch areas swallow taps.
+            VStack(spacing: 8) {
+                if let back = model.backStack.last {
+                    BackPill(label: back.label, depth: model.backStack.count,
+                             onBack: { model.goBack() }, onDismiss: { model.clearBackStack() })
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                if let mark = model.currentBookmark, mark.hasAnnotation {
+                    PageNotePill(bookmark: mark) { model.annotating = .bookmark(mark) }
+                        .padding(.horizontal, 60)   // long notes truncate instead of spanning the page
+                        .transition(.opacity)
+                }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 12)
         }
         .animation(.snappy, value: model.backStack.count)
         .onChange(of: model.readingPageNumber) { model.noteReadingPosition() }
@@ -136,7 +147,7 @@ private struct ReaderContent: View {
             }, onSelectBookmark: { bookmark in
                 showHighlights = false
                 model.open(bookmark)
-            })
+            }, onAnnotate: annotateFromList)
         }
         .inspector(isPresented: $showAssistant) {
             AssistantPanel(model: model, onClose: { showAssistant = false })
@@ -152,6 +163,7 @@ private struct ReaderContent: View {
             ForEach(Highlight.Color.allCases.filter { $0 != highlight.color }, id: \.self) { color in
                 Button("Make \(color.rawValue)") { Task { await model.recolor(highlight, to: color) } }
             }
+            Button(highlight.hasAnnotation ? "Edit Note" : "Add Note") { model.annotating = .highlight(highlight) }
             Button("Ask the assistant about it") {
                 model.selection = highlight.text
                 showAssistant = true
@@ -160,6 +172,14 @@ private struct ReaderContent: View {
             Button("Remove highlight", role: .destructive) { Task { await model.removeHighlight(highlight) } }
         } message: { highlight in
             Text("“\(highlight.text.prefix(140))”")
+        }
+        .sheet(item: $model.annotating) { target in
+            AnnotationEditor(model: model, target: target)
+        }
+        .confirmationDialog("This page has a note", isPresented: $confirmRemovePageNote) {
+            Button("Remove Bookmark and Note", role: .destructive) { Task { await model.toggleBookmark() } }
+        } message: {
+            Text("The page note is kept with the bookmark, so removing the bookmark deletes the note too.")
         }
     }
 
@@ -240,8 +260,9 @@ private struct ReaderContent: View {
             }
             Button(model.currentBookmark == nil ? "Bookmark this page" : "Remove bookmark",
                    systemImage: model.currentBookmark == nil ? "bookmark" : "bookmark.fill") {
-                Task { await model.toggleBookmark() }
+                bookmarkTapped()
             }
+            Button("Page Note", systemImage: pageNoteIcon) { Task { await model.annotatePage() } }
             Button(model.readAloud.state == .idle ? "Read aloud" : "Stop reading aloud",
                    systemImage: model.readAloud.state == .idle ? "speaker.wave.2" : "speaker.slash") {
                 if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
@@ -254,13 +275,35 @@ private struct ReaderContent: View {
                     }, onSelectBookmark: { bookmark in
                         showHighlights = false
                         model.open(bookmark)
-                    })
+                    }, onAnnotate: annotateFromList)
                     .frame(minWidth: 360, minHeight: 440)
                 }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
             }
+        }
+    }
+
+    /// The list is a popover/sheet; let it close before the note editor sheet opens.
+    private func annotateFromList(_ target: AnnotationTarget) {
+        showHighlights = false
+        Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            model.annotating = target
+        }
+    }
+
+    private var pageNoteIcon: String {
+        model.currentBookmark?.hasAnnotation == true ? "note.text" : "note.text.badge.plus"
+    }
+
+    /// Removing the bookmark of a page with a note would delete the note: ask first.
+    private func bookmarkTapped() {
+        if model.currentBookmark?.hasAnnotation == true {
+            confirmRemovePageNote = true
+        } else {
+            Task { await model.toggleBookmark() }
         }
     }
 
@@ -288,7 +331,7 @@ private struct ReaderContent: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(model.currentBookmark == nil ? "Bookmark this page" : "Remove bookmark",
                    systemImage: model.currentBookmark == nil ? "bookmark" : "bookmark.fill") {
-                Task { await model.toggleBookmark() }
+                bookmarkTapped()
             }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
@@ -296,7 +339,8 @@ private struct ReaderContent: View {
                        systemImage: model.readAloud.state == .idle ? "speaker.wave.2" : "speaker.slash") {
                     if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
                 }
-                Button("Highlights & Bookmarks", systemImage: "highlighter") { showHighlights = true }
+                Button("Page Note", systemImage: pageNoteIcon) { Task { await model.annotatePage() } }
+                Button("Highlights & Notes", systemImage: "highlighter") { showHighlights = true }
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
@@ -353,6 +397,7 @@ private struct HighlightsList: View {
     let model: ReaderModel
     let onSelect: (Highlight) -> Void
     let onSelectBookmark: (Bookmark) -> Void
+    let onAnnotate: (AnnotationTarget) -> Void
     @State private var tab = 0
 
     var body: some View {
@@ -360,7 +405,7 @@ private struct HighlightsList: View {
             VStack(spacing: 0) {
                 Picker("Show", selection: $tab) {
                     Text("Highlights").tag(0)
-                    Text("Bookmarks").tag(1)
+                    Text("Pages").tag(1)
                 }
                 .pickerStyle(.segmented).padding([.horizontal, .top])
                 if tab == 0 { highlightList } else { bookmarkList }
@@ -380,20 +425,32 @@ private struct HighlightsList: View {
     private var bookmarkList: some View {
         if model.bookmarks.isEmpty {
             ContentUnavailableView("No bookmarks yet", systemImage: "bookmark",
-                                   description: Text("Tap the bookmark button to mark the current page."))
+                                   description: Text("Tap the bookmark button to mark the current page, or Page Note to write on it."))
         } else {
             List {
                 ForEach(model.bookmarks) { bookmark in
                     Button { onSelectBookmark(bookmark) } label: {
                         HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "bookmark.fill").foregroundStyle(.tint)
+                            Image(systemName: bookmark.hasAnnotation ? "note.text" : "bookmark.fill").foregroundStyle(.tint)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("p. \(model.page(of: bookmark))").font(.headline)
                                 Text(bookmark.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                                AnnotationSummary(item: bookmark)
                             }
                         }
                     }
                     .buttonStyle(.plain)
+                    .swipeActions(edge: .leading) {
+                        Button(bookmark.hasAnnotation ? "Edit Note" : "Add Note", systemImage: "note.text") {
+                            onAnnotate(.bookmark(bookmark))
+                        }
+                        .tint(.orange)
+                    }
+                    .contextMenu {
+                        Button(bookmark.hasAnnotation ? "Edit Note" : "Add Note", systemImage: "note.text") {
+                            onAnnotate(.bookmark(bookmark))
+                        }
+                    }
                 }
                 .onDelete { offsets in
                     let doomed = offsets.map { model.bookmarks[$0] }
@@ -420,10 +477,22 @@ private struct HighlightsList: View {
                                         Text(highlight.text).lineLimit(5).foregroundStyle(.primary)
                                         Text(model.locationLabel(highlight.location))
                                             .font(.caption).foregroundStyle(.secondary)
+                                        AnnotationSummary(item: highlight)
                                     }
                                 }
                             }
                             .buttonStyle(.plain)
+                            .swipeActions(edge: .leading) {
+                                Button(highlight.hasAnnotation ? "Edit Note" : "Add Note", systemImage: "note.text") {
+                                    onAnnotate(.highlight(highlight))
+                                }
+                                .tint(.orange)
+                            }
+                            .contextMenu {
+                                Button(highlight.hasAnnotation ? "Edit Note" : "Add Note", systemImage: "note.text") {
+                                    onAnnotate(.highlight(highlight))
+                                }
+                            }
                         }
                         .onDelete { offsets in
                             let doomed = offsets.map { model.highlights[$0] }
@@ -469,6 +538,7 @@ private struct SelectionBar: View {
     let onDictionary: () -> Void
     let onTranslate: () -> Void
     let onHighlight: (Highlight.Color) -> Void
+    let onNote: () -> Void
 
     private var isShort: Bool { selection.split(whereSeparator: \.isWhitespace).count <= 3 }
 
@@ -491,6 +561,7 @@ private struct SelectionBar: View {
                         Button(color.rawValue.capitalized) { onHighlight(color) }
                     }
                 }
+            bar("Note", "note.text.badge.plus", showTitles, action: onNote)
             Divider().frame(height: 24)
             if isShort {
                 bar("Dictionary", "book", showTitles, action: onDictionary)
@@ -713,4 +784,50 @@ struct DictionaryView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: UIReferenceLibraryViewController, context: Context) {}
+}
+
+/// A note's text (first lines) and a drawing marker, under a highlight or page in lists.
+struct AnnotationSummary: View {
+    let item: any Annotatable
+
+    var body: some View {
+        if item.hasAnnotation {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if item.drawingID != nil {
+                    Image(systemName: "scribble.variable").accessibilityLabel("Drawing")
+                }
+                if let note = item.note, item.hasNote {
+                    Text(note).lineLimit(3)
+                } else {
+                    Text("Drawing")
+                }
+            }
+            .font(.callout)
+            .foregroundStyle(.orange)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// Shown at the top of a page that has a note; tap to read or edit it.
+private struct PageNotePill: View {
+    let bookmark: Bookmark
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 6) {
+                Image(systemName: bookmark.drawingID != nil && !bookmark.hasNote ? "scribble.variable" : "note.text")
+                Text(bookmark.note.flatMap { bookmark.hasNote ? $0 : nil } ?? "Drawing")
+                    .lineLimit(1)
+            }
+            .font(.callout)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .contentShape(.capsule)   // a plain button only takes taps where something is drawn
+        }
+        .buttonStyle(.plain)
+        .glassEffect(in: .capsule)
+        .accessibilityLabel("Page note")
+        .accessibilityIdentifier("pageNote.pill")
+    }
 }

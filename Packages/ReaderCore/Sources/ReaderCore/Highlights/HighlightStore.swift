@@ -89,6 +89,44 @@ public actor HighlightStore {
         }
     }
 
+    // MARK: Drawings
+    //
+    //     <container>/Highlights/Drawings/<id>.drawing          — PencilKit data, for editing
+    //     <container>/Documents/Highlights/Drawings/<id>.png    — picture, linked from the Markdown
+    //
+    // Every edit saves under a new id, so devices never overwrite each other's drawing files.
+
+    public func saveDrawing(id: UUID, data: Data, png: Data?) throws {
+        _ = resolveBackend()
+        let dataDir = dataDirectory.appending(path: "Drawings")
+        try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+        try coordinatedWrite(data, to: dataDir.appending(path: "\(id.uuidString).drawing"))
+        if let png {
+            let pictureDir = textDirectory.appending(path: "Drawings")
+            try FileManager.default.createDirectory(at: pictureDir, withIntermediateDirectories: true)
+            try coordinatedWrite(png, to: pictureDir.appending(path: "\(id.uuidString).png"))
+        }
+    }
+
+    /// The drawing's data, downloading it from iCloud first if needed (waits up to ~10 s).
+    public func loadDrawing(id: UUID) async -> Data? {
+        _ = resolveBackend()
+        let url = dataDirectory.appending(path: "Drawings/\(id.uuidString).drawing")
+        for attempt in 0..<20 {
+            if let data = coordinatedData(url) { return data }
+            if attempt == 0 { try? FileManager.default.startDownloadingUbiquitousItem(at: url) }
+            guard backend == .iCloud else { return nil }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return nil
+    }
+
+    public func deleteDrawing(id: UUID) {
+        _ = resolveBackend()
+        try? coordinatedDelete(dataDirectory.appending(path: "Drawings/\(id.uuidString).drawing"))
+        try? coordinatedDelete(textDirectory.appending(path: "Drawings/\(id.uuidString).png"))
+    }
+
     public var textFolderDescription: String {
         backend == .iCloud ? "iCloud Drive › Scriptorium › Highlights" : "On My iPad › Scriptorium › Highlights"
     }
@@ -102,6 +140,13 @@ public actor HighlightStore {
     static func fileSafe(_ title: String) -> String {
         let cleaned = title.map { "/\\:?%*|\"<>".contains($0) ? "-" : $0 }
         return String(String(cleaned).trimmingCharacters(in: .whitespaces).prefix(120))
+    }
+
+    private func coordinatedData(_ url: URL) -> Data? {
+        var result: Data?
+        var error: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { result = try? Data(contentsOf: $0) }
+        return result
     }
 
     private func coordinatedRead(_ url: URL) -> BookHighlights? {

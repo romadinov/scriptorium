@@ -49,18 +49,42 @@ public struct Highlight: Codable, Hashable, Identifiable, Sendable {
     public var color: Color
     public var created: Date
     public var note: String?
+    /// Apple Pencil sketch attached to the highlight (see `HighlightStore.saveDrawing`).
+    public var drawingID: UUID?
+    /// Last edit of the note/drawing; the newer copy wins when devices merge.
+    public var modified: Date?
     public var location: Location
 
     public init(id: UUID = UUID(), text: String, color: Color = .yellow, created: Date = Date(),
-                note: String? = nil, location: Location) {
+                note: String? = nil, drawingID: UUID? = nil, modified: Date? = nil, location: Location) {
         self.id = id
         self.text = text
         self.color = color
         self.created = created
         self.note = note
+        self.drawingID = drawingID
+        self.modified = modified
         self.location = location
     }
 }
+
+/// Something a note (text and/or drawing) can be attached to: a highlight, or a page via its bookmark.
+public protocol Annotatable {
+    var id: UUID { get }
+    var note: String? { get set }
+    var drawingID: UUID? { get set }
+    var created: Date { get }
+    var modified: Date? { get set }
+}
+
+extension Annotatable {
+    public var hasNote: Bool { !(note?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }
+    public var hasAnnotation: Bool { hasNote || drawingID != nil }
+    var lastEdit: Date { modified ?? created }
+}
+
+extension Highlight: Annotatable {}
+extension Bookmark: Annotatable {}
 
 /// A bookmarked place: a page (fixed layout) or a chapter + position within it (reflowable).
 public struct Bookmark: Codable, Hashable, Identifiable, Sendable {
@@ -72,14 +96,22 @@ public struct Bookmark: Codable, Hashable, Identifiable, Sendable {
     /// The first words on the page, so bookmarks are recognisable and searchable.
     public var snippet: String
     public var created: Date
+    /// A page note: text and/or an Apple Pencil drawing.
+    public var note: String?
+    public var drawingID: UUID?
+    public var modified: Date?
 
-    public init(id: UUID = UUID(), page: Int, progress: Double = 0, label: String, snippet: String, created: Date = Date()) {
+    public init(id: UUID = UUID(), page: Int, progress: Double = 0, label: String, snippet: String, created: Date = Date(),
+                note: String? = nil, drawingID: UUID? = nil, modified: Date? = nil) {
         self.id = id
         self.page = page
         self.progress = progress
         self.label = label
         self.snippet = snippet
         self.created = created
+        self.note = note
+        self.drawingID = drawingID
+        self.modified = modified
     }
 }
 
@@ -121,15 +153,16 @@ public struct BookHighlights: Codable, Sendable, Equatable {
         updated = try c.decodeIfPresent(Date.self, forKey: .updated) ?? Date()
     }
 
-    /// Union of both sides by id, minus anything either side deleted. Sorted in reading order.
+    /// Union of both sides by id, minus anything either side deleted; where both have an item, the more
+    /// recently edited copy wins (so a note edited on another device isn't lost). Sorted in reading order.
     public func merged(with other: BookHighlights) -> BookHighlights {
         var result = self
         result.deleted = deleted.union(other.deleted)
         var byID = Dictionary(highlights.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for h in other.highlights where byID[h.id] == nil { byID[h.id] = h }
+        for h in other.highlights where byID[h.id].map({ h.lastEdit > $0.lastEdit }) ?? true { byID[h.id] = h }
         result.highlights = byID.values.filter { !result.deleted.contains($0.id) }.sorted(by: Self.readingOrder)
         var marks = Dictionary(bookmarks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for b in other.bookmarks where marks[b.id] == nil { marks[b.id] = b }
+        for b in other.bookmarks where marks[b.id].map({ b.lastEdit > $0.lastEdit }) ?? true { marks[b.id] = b }
         result.bookmarks = marks.values.filter { !result.deleted.contains($0.id) }
             .sorted { ($0.page, $0.progress) < ($1.page, $1.progress) }
         result.path = path ?? other.path
@@ -157,18 +190,26 @@ public struct BookHighlights: Codable, Sendable, Equatable {
         lines.append(TaskPaper.note("\(fileName) · \(highlights.count) highlight\(highlights.count == 1 ? "" : "s") · updated \(TaskPaper.date(updated))", indent: 1))
         for b in bookmarks {
             let link = DeepLink(documentID: documentID, page: b.page, progress: b.progress).url.absoluteString
-            lines.append(TaskPaper.item("Bookmark: \(b.snippet)", tags: [("bookmark", nil), ("location", b.label),
-                                                                         ("date", TaskPaper.date(b.created)), ("open", link)]))
+            var tags: [(String, String?)] = [(b.hasAnnotation ? "pagenote" : "bookmark", nil), ("location", b.label),
+                                             ("date", TaskPaper.date(b.created))]
+            if let drawing = b.drawingID { tags.append(("drawing", Self.drawingPath(drawing))) }
+            tags.append(("open", link))
+            lines.append(TaskPaper.item("\(b.hasAnnotation ? "Page note" : "Bookmark"): \(b.snippet)", tags: tags))
+            if let note = b.note, b.hasNote { lines.append(TaskPaper.note(note)) }
         }
         for h in highlights {
             var tags: [(String, String?)] = [("location", locationLabel(h.location)), ("date", TaskPaper.date(h.created))]
             if h.color != .yellow { tags.append(("color", h.color.rawValue)) }
+            if let drawing = h.drawingID { tags.append(("drawing", Self.drawingPath(drawing))) }
             tags.append(("open", DeepLink(documentID: documentID, page: h.location.pageIndex, highlightID: h.id).url.absoluteString))
             lines.append(TaskPaper.item(h.text, tags: tags))
-            if let note = h.note, !note.isEmpty { lines.append(TaskPaper.note(note)) }
+            if let note = h.note, h.hasNote { lines.append(TaskPaper.note(note)) }
         }
         return lines.joined(separator: "\n") + "\n"
     }
+
+    /// Where a drawing's picture sits, relative to the Markdown file.
+    public static func drawingPath(_ id: UUID) -> String { "Drawings/\(id.uuidString).png" }
 }
 
 /// `scriptorium://open?doc=<fingerprint>&page=<n>&progress=<0…1>&highlight=<uuid>` — opens a book at a place.

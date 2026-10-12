@@ -93,9 +93,14 @@ final class ReaderFlowTests: XCTestCase {
         snap("epub-2-next-chapter")
         XCTAssertTrue(shown, "Next chapter text never appeared")
 
-        // Long-press a word inside a paragraph (a fixed coordinate may land on an illustration).
-        text.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).press(forDuration: 1.0)
+        // Long-press a word inside a visible paragraph (a fixed coordinate may land on an illustration).
+        let paragraphs = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Bennet'"))
+        let window = app.windows.firstMatch.frame
+        let paragraph = (0..<min(paragraphs.count, 12)).map { paragraphs.element(boundBy: $0) }
+            .first { $0.isHittable && $0.frame.height > 40 && window.contains($0.frame) } ?? text
+        paragraph.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3)).press(forDuration: 1.0)
         let explainOrDefine = app.buttons["Define"].waitForExistence(timeout: 5) ? app.buttons["Define"] : app.buttons["Explain"]
+        if !explainOrDefine.exists { snap("epub-3-no-bar") }
         XCTAssertTrue(explainOrDefine.exists, "Selection bar did not appear")
         snap("epub-3-selected")
         explainOrDefine.tap()
@@ -201,6 +206,70 @@ final class ReaderFlowTests: XCTestCase {
         snap("highlight-djvu")
         app.buttons["Highlights"].tap()
         XCTAssertTrue(app.popovers.buttons.firstMatch.waitForExistence(timeout: 5), "DjVu highlight not saved")
+    }
+
+    func testAnnotationsWithTextAndDrawing() throws {
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["Assistant"].waitForExistence(timeout: 10))
+        sleep(2)
+        // Page notes persist between runs: start from a page without one.
+        if app.buttons["Remove bookmark"].waitForExistence(timeout: 2) {
+            app.buttons["Remove bookmark"].tap()
+            let confirm = app.buttons["Remove Bookmark and Note"]
+            if confirm.waitForExistence(timeout: 3) { confirm.tap() }
+            XCTAssertTrue(app.buttons["Bookmark this page"].waitForExistence(timeout: 5))
+        }
+
+        // 1. Text note on a selection.
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.235)).press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["Note"].waitForExistence(timeout: 5), "Selection bar has no Note button")
+        app.buttons["Note"].tap()
+        let text = app.textViews["annotation.text"]
+        XCTAssertTrue(text.waitForExistence(timeout: 5), "Note editor did not open")
+        text.tap()
+        text.typeText("Entropy never decreases")
+        snap("annotation-1-text")
+        app.buttons["Save"].tap()
+        sleep(1)
+        app.buttons["Highlights"].tap()
+        let noted = app.popovers.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Entropy never decreases'")).firstMatch
+        XCTAssertTrue(noted.waitForExistence(timeout: 5), "Note not shown under the highlight")
+        snap("annotation-2-list")
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()   // dismiss popover
+        sleep(1)
+
+        // 2. Drawing on the page.
+        app.buttons["Page Note"].tap()
+        XCTAssertTrue(app.buttons["Drawing"].waitForExistence(timeout: 5), "Page note editor did not open")
+        app.buttons["Drawing"].tap()
+        let canvas = app.otherElements["annotation.canvas"].exists ? app.otherElements["annotation.canvas"]
+                                                                    : app.scrollViews["annotation.canvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 5), "No drawing canvas")
+        let start = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.3))
+        start.press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)))
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.3))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.6)))
+        snap("annotation-3-drawing")
+        app.buttons["Save"].tap()
+        let pill = app.buttons["pageNote.pill"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 5), "Page shows no note marker")
+        XCTAssertTrue(app.buttons["Remove bookmark"].exists, "Page note did not bookmark the page")
+        snap("annotation-4-pill")
+
+        // 3. Reopen: the drawing loads back.
+        pill.tap()
+        sleep(3)
+        snap("annotation-5-reopened")
+        XCTAssertTrue(app.buttons["Clear Drawing"].waitForExistence(timeout: 10), "Saved drawing did not load")
+        app.buttons["Cancel"].tap()
+
+        // 4. Removing the bookmark asks first, because the note goes with it.
+        app.buttons["Remove bookmark"].tap()
+        let confirm = app.buttons["Remove Bookmark and Note"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No confirmation before deleting a page note")
+        confirm.tap()
+        XCTAssertTrue(pill.waitForNonExistence(timeout: 5))
     }
 
     /// scripts/seed-simulator.sh drops books into the (local fallback) Inbox, including a new folder.
@@ -384,7 +453,7 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Wi-Fi Transfer"].waitForExistence(timeout: 3))
         snap("iphone-2-library-menu")
         app.buttons["Bookmarks"].tap()
-        XCTAssertTrue(app.navigationBars["All Bookmarks"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Bookmarks & Page Notes"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
 
         openFolder("Fiction")
@@ -396,9 +465,9 @@ final class ReaderFlowTests: XCTestCase {
         sleep(1)
         snap("iphone-4-epub-next-page")
         app.buttons["More"].tap()
-        XCTAssertTrue(app.buttons["Highlights & Bookmarks"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Highlights & Notes"].waitForExistence(timeout: 3))
         snap("iphone-5-reader-menu")
-        app.buttons["Highlights & Bookmarks"].tap()
+        app.buttons["Highlights & Notes"].tap()
         XCTAssertTrue(app.staticTexts["Notes"].waitForExistence(timeout: 5) || app.navigationBars["Notes"].exists)
         app.swipeDown(velocity: .fast)
         sleep(1)
@@ -627,7 +696,7 @@ final class ReaderFlowTests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
         app.buttons["Bookmarks"].tap()
-        let search = app.searchFields["Search bookmarks and books"]
+        let search = app.searchFields["Search bookmarks, highlights, notes and books"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("Thermodynamics")
@@ -640,10 +709,14 @@ final class ReaderFlowTests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
         // File-name search across folders.
+        // A crowded toolbar collapses the search field into a Search button.
         let librarySearch = app.searchFields["Search all books"]
+        if !librarySearch.waitForExistence(timeout: 3), app.buttons["Search"].exists { app.buttons["Search"].tap() }
         XCTAssertTrue(librarySearch.waitForExistence(timeout: 5))
         librarySearch.tap()
         librarySearch.typeText("тепло")
+        sleep(2)
+        snap("search-0-files")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Тепло и порядок'")).firstMatch
             .waitForExistence(timeout: 5), "File-name search failed")
         snap("search-1-files")

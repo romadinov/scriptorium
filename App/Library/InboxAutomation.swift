@@ -62,7 +62,8 @@ final class InboxWatcher {
             query.start()
             self.query = query
         } else {
-            // Local fallback (no iCloud account): a light poll is plenty; the tolerance lets iOS batch wake-ups.
+            // Local fallback (no iCloud account): check now, then a light poll; the tolerance lets iOS batch wake-ups.
+            if InboxSync.hasBooks(in: inbox) { scheduleImport() }
             poll = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }

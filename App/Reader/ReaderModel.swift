@@ -118,6 +118,8 @@ final class ReaderModel {
     // Highlights
     var highlights: [Highlight] = []
     var tappedHighlight: Highlight?
+    /// The highlight or page whose note is being edited.
+    var annotating: AnnotationTarget?
     private(set) var highlightLocationDescription = ""
     @ObservationIgnored private var highlightBook: BookHighlights?
     @ObservationIgnored private let highlightStore: HighlightStore
@@ -303,10 +305,11 @@ final class ReaderModel {
     }
 
     /// Highlights the current selection in `color`.
-    func addHighlight(color: Highlight.Color = .yellow) async {
+    @discardableResult
+    func addHighlight(color: Highlight.Color = .yellow) async -> Highlight? {
         guard let captured = await captureSelection?() else {
             statusMessage = "Couldn't place that highlight — try selecting the text again."
-            return
+            return nil
         }
         let highlight = Highlight(text: captured.1, color: color, location: captured.0)
         highlightBook?.highlights.append(highlight)
@@ -315,9 +318,11 @@ final class ReaderModel {
         clearSelection?()
         selection = ""
         await persistHighlights()
+        return highlight
     }
 
     func removeHighlight(_ highlight: Highlight) async {
+        if let drawing = highlight.drawingID { await highlightStore.deleteDrawing(id: drawing) }
         highlightBook?.highlights.removeAll { $0.id == highlight.id }
         highlightBook?.deleted.insert(highlight.id)
         highlights = highlightBook?.highlights ?? []
@@ -373,19 +378,78 @@ final class ReaderModel {
 
     func toggleBookmark() async {
         if let existing = currentBookmark {
-            highlightBook?.bookmarks.removeAll { $0.id == existing.id }
-            highlightBook?.deleted.insert(existing.id)
-        } else {
-            let snippet = await pageSnippet()
-            let mark = Bookmark(page: currentPage, progress: reflowable == nil ? 0 : pageProgress,
-                                label: currentPosition.label, snippet: snippet)
-            highlightBook?.bookmarks.append(mark)
+            await removeBookmark(existing)
+            return
         }
+        await addBookmark()
+    }
+
+    @discardableResult
+    private func addBookmark() async -> Bookmark {
+        let snippet = await pageSnippet()
+        let mark = Bookmark(page: currentPage, progress: reflowable == nil ? 0 : pageProgress,
+                            label: currentPosition.label, snippet: snippet)
+        highlightBook?.bookmarks.append(mark)
+        bookmarks = highlightBook?.bookmarks ?? []
+        await persistHighlights()
+        return mark
+    }
+
+    // MARK: Annotations
+
+    /// Highlights the selection and opens a note on it.
+    func annotateSelection() async {
+        guard let highlight = await addHighlight() else { return }
+        annotating = .highlight(highlight)
+    }
+
+    /// Opens the note for the current page (a page note lives on the page's bookmark).
+    func annotatePage() async {
+        let mark = if let currentBookmark { currentBookmark } else { await addBookmark() }
+        annotating = .bookmark(mark)
+    }
+
+    func loadDrawing(_ id: UUID) async -> Data? {
+        await highlightStore.loadDrawing(id: id)
+    }
+
+    /// Saves a note. `drawing` is nil when the drawing wasn't touched; `.some(nil)` removes it.
+    func saveAnnotation(_ target: AnnotationTarget, note: String, drawing: (data: Data, png: Data?)??) async {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        var drawingID = target.item.drawingID
+        if let drawing {
+            if let old = drawingID { await highlightStore.deleteDrawing(id: old) }
+            drawingID = nil
+            if let drawing {
+                let id = UUID()
+                do {
+                    try await highlightStore.saveDrawing(id: id, data: drawing.data, png: drawing.png)
+                    drawingID = id
+                } catch {
+                    statusMessage = "Couldn't save the drawing: \(error.localizedDescription)"
+                }
+            }
+        }
+        func update<T: Annotatable>(_ item: inout T) {
+            item.note = trimmed.isEmpty ? nil : trimmed
+            item.drawingID = drawingID
+            item.modified = Date()
+        }
+        switch target {
+        case .highlight(let h):
+            guard let i = highlightBook?.highlights.firstIndex(where: { $0.id == h.id }) else { return }
+            update(&highlightBook!.highlights[i])
+        case .bookmark(let b):
+            guard let i = highlightBook?.bookmarks.firstIndex(where: { $0.id == b.id }) else { return }
+            update(&highlightBook!.bookmarks[i])
+        }
+        highlights = highlightBook?.highlights ?? []
         bookmarks = highlightBook?.bookmarks ?? []
         await persistHighlights()
     }
 
     func removeBookmark(_ bookmark: Bookmark) async {
+        if let drawing = bookmark.drawingID { await highlightStore.deleteDrawing(id: drawing) }
         highlightBook?.bookmarks.removeAll { $0.id == bookmark.id }
         highlightBook?.deleted.insert(bookmark.id)
         bookmarks = highlightBook?.bookmarks ?? []
@@ -594,4 +658,21 @@ final class ChatModel {
         error = nil
         notice = nil
     }
+}
+
+/// What a note is attached to.
+enum AnnotationTarget: Identifiable, Equatable {
+    case highlight(Highlight)
+    case bookmark(Bookmark)
+
+    var id: UUID { item.id }
+
+    var item: any Annotatable {
+        switch self {
+        case .highlight(let h): h
+        case .bookmark(let b): b
+        }
+    }
+
+    static func == (a: Self, b: Self) -> Bool { a.id == b.id }
 }

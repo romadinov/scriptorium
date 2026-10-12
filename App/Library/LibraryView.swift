@@ -374,7 +374,7 @@ private struct AllNotesView: View {
         NavigationStack {
             List {
                 Picker("Show", selection: $tab) {
-                    Text("Bookmarks").tag(0)
+                    Text("Pages").tag(0)
                     Text("Highlights").tag(1)
                 }
                 .pickerStyle(.segmented)
@@ -383,13 +383,14 @@ private struct AllNotesView: View {
                     Section(book.title) {
                         if tab == 0 {
                             ForEach(book.bookmarks.filter(matches)) { mark in
-                                row(icon: "bookmark.fill", title: mark.label, detail: mark.snippet) {
+                                row(icon: mark.hasAnnotation ? "note.text" : "bookmark.fill", title: mark.label, detail: mark.snippet,
+                                    annotation: mark) {
                                     open(book, page: mark.page, progress: mark.progress)
                                 }
                             }
                         } else {
                             ForEach(book.highlights.filter(matches)) { h in
-                                row(icon: "highlighter", title: h.text, detail: nil, tint: h.color.swiftUI) {
+                                row(icon: "highlighter", title: h.text, detail: nil, tint: h.color.swiftUI, annotation: h) {
                                     open(book, page: h.location.pageIndex, progress: 0)
                                 }
                             }
@@ -409,8 +410,8 @@ private struct AllNotesView: View {
                     }
                 }
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search bookmarks and books")
-            .navigationTitle(tab == 0 ? "All Bookmarks" : "All Highlights")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search bookmarks, highlights, notes and books")
+            .navigationTitle(tab == 0 ? "Bookmarks & Page Notes" : "Highlights & Notes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .alert("Book not in this library", isPresented: Binding(get: { notFound != nil }, set: { if !$0 { notFound = nil } })) {
@@ -436,6 +437,7 @@ private struct AllNotesView: View {
 
     private func matches(_ mark: Bookmark) -> Bool {
         query.isEmpty || mark.snippet.localizedStandardContains(query) || mark.label.localizedStandardContains(query)
+            || (mark.note ?? "").localizedStandardContains(query)
             || books.contains { $0.bookmarks.contains(mark) && $0.title.localizedStandardContains(query) }
     }
 
@@ -445,13 +447,14 @@ private struct AllNotesView: View {
     }
 
     private func row(icon: String, title: String, detail: String?, tint: Color = .accentColor,
-                     action: @escaping () -> Void) -> some View {
+                     annotation: (any Annotatable)? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: icon).foregroundStyle(tint)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).lineLimit(3).foregroundStyle(.primary)
                     if let detail { Text(detail).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
+                    if let annotation { AnnotationSummary(item: annotation) }
                 }
             }
         }
