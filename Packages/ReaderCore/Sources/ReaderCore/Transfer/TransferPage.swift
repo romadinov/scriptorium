@@ -55,7 +55,7 @@ enum TransferPage {
     <div class="crumbs" id="crumbs"></div>
     <button id="mkdir">New folder</button>
     <button class="primary" id="pick">Upload files…</button>
-    <input type="file" id="files" multiple hidden accept=".pdf,.djvu,.djv,.epub,.fb2,.zip,.webarchive,.chm">
+    <input type="file" id="files" multiple hidden accept=".pdf,.djvu,.djv,.epub,.fb2,.zip,.webarchive,.chm,.doc,.docx">
   </div>
   <div id="drop">Drop books here to upload them into this folder</div>
   <div class="uploads" id="uploads"></div>

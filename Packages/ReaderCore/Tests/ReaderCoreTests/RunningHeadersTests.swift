@@ -34,3 +34,31 @@ private func page(_ n: Int, body: String) -> String {
     #expect(trimmed.count < loop.count / 2)
     #expect(!RepetitionGuard.isLooping("Softmax turns a vector of scores into a probability distribution. Larger scores get larger probabilities, and all of them sum to one, which is why attention uses it."))
 }
+
+@Test func speechStartsFromTappedWord() {
+    let paragraphs: [(text: String, anchor: Int)] = [("First paragraph is skipped.", 1),
+                                                     ("Entropy never decreases over time.", 2),
+                                                     ("Then the next one.", 3)]
+    // Offset 10 is inside "never".
+    let chunks = SpeechPlanner.chunks(paragraphs, startingAt: (anchor: 2, offset: 10))
+    #expect(chunks.map(\.anchor) == [2, 3])
+    #expect(chunks[0].text == "never decreases over time.")
+    #expect(chunks[0].offset == 8)
+    // Unknown anchor (e.g. stale tap): read everything.
+    #expect(SpeechPlanner.chunks(paragraphs, startingAt: (anchor: 99, offset: 0)).count == 3)
+    #expect(SpeechPlanner.wordStart(in: "a  word", at: 2) == 3)
+}
+
+@Test func tapPointMapsToWordOffsetInPageText() {
+    let page = PageText(origin: .ocr, lines: [
+        [.init(text: "Entropy", rect: CGRect(x: 0.1, y: 0.1, width: 0.2, height: 0.03)),
+         .init(text: "rises", rect: CGRect(x: 0.32, y: 0.1, width: 0.12, height: 0.03))],
+        [.init(text: "Heat", rect: CGRect(x: 0.1, y: 0.15, width: 0.1, height: 0.03)),
+         .init(text: "flows", rect: CGRect(x: 0.22, y: 0.15, width: 0.12, height: 0.03))],
+    ])
+    let text = page.plainText as NSString                       // "Entropy rises\nHeat flows"
+    #expect(page.characterOffset(at: CGPoint(x: 0.35, y: 0.11)) == text.range(of: "rises").location)
+    #expect(page.characterOffset(at: CGPoint(x: 0.25, y: 0.165)) == text.range(of: "flows").location)
+    #expect(page.characterOffset(at: CGPoint(x: 0.9, y: 0.16)) == text.range(of: "flows").location)   // nearest on line
+    #expect(page.characterOffset(at: CGPoint(x: 0.5, y: 0.6)) == nil)
+}

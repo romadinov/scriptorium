@@ -13,7 +13,9 @@ private let log = Logger(subsystem: "com.romadinov.reader", category: "ReadAloud
 final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
     enum State { case idle, playing, paused }
 
-    private(set) var state: State = .idle
+    private(set) var state: State = .idle {
+        didSet { if (state == .idle) != (oldValue == .idle) { model?.readingAloudChanged?(state != .idle) } }
+    }
     /// 0.5…2 × normal speed.
     var speed: Double = UserDefaults.standard.object(forKey: "speechSpeed") as? Double ?? 1 {
         didSet { UserDefaults.standard.set(speed, forKey: "speechSpeed") }
@@ -23,6 +25,8 @@ final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
         didSet { UserDefaults.standard.set(voiceID, forKey: "speechVoice") }
     }
     private(set) var language: String?
+    /// Start of the passage being spoken (for VoiceOver and tests).
+    private(set) var nowReading = ""
 
     @ObservationIgnored private let synthesizer = AVSpeechSynthesizer()
     @ObservationIgnored private weak var model: ReaderModel?
@@ -32,6 +36,7 @@ final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
     @ObservationIgnored private var selectionOnly = false
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var remoteCommandsInstalled = false
+    @ObservationIgnored private var startAt: (anchor: Int, offset: Int)?
 
     override init() {
         super.init()
@@ -46,14 +51,16 @@ final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
 
     // MARK: Control
 
-    /// Starts reading the selection if there is one, else from the current position onward.
-    func start(_ model: ReaderModel) {
+    /// Starts reading the selection if there is one, else from the current position onward
+    /// (or from `from`: a word the reader tapped — anchor and UTF-16 offset as in `speechParagraphs`).
+    func start(_ model: ReaderModel, from: (anchor: Int, offset: Int)? = nil) {
         stop()
         self.model = model
         generation += 1
         activateAudio(title: model.book.title)
         state = .playing
-        if !model.selection.isEmpty {
+        startAt = from
+        if from == nil, !model.selection.isEmpty {
             selectionOnly = true
             queue = SpeechPlanner.chunks([(model.selection, -1)])
             speakNext()
@@ -100,9 +107,10 @@ final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
         // Reflowable books load the next chapter on demand; give it a moment before calling it the end.
         for attempt in 0..<6 {
             let batch = await source(restart && attempt == 0)
-            let chunks = SpeechPlanner.chunks(batch)
+            let chunks = SpeechPlanner.chunks(batch, startingAt: restart ? startAt : nil)
             log.debug("refill restart=\(restart) attempt=\(attempt): \(batch.count) paragraphs → \(chunks.count) chunks")
             if !chunks.isEmpty {
+                if restart { startAt = nil }
                 queue += chunks
                 return
             }
@@ -126,6 +134,7 @@ final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
         current = chunk
         lastSentence = NSRange(location: NSNotFound, length: 0)
         language = chunk.language
+        nowReading = String(chunk.text.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(80))
         let utterance = AVSpeechUtterance(string: chunk.text)
         utterance.voice = voiceID.flatMap(AVSpeechSynthesisVoice.init(identifier:)) ?? SpeechPlanner.bestVoice(for: chunk.language)
         utterance.rate = rate

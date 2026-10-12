@@ -509,6 +509,73 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Read aloud"].waitForExistence(timeout: 5))
     }
 
+    /// While reading aloud, tapping a word continues from that word (EPUB and PDF).
+    func testTapWordWhileReadingAloud() throws {
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["Read aloud"].waitForExistence(timeout: 10))
+        sleep(2)
+        app.buttons["Read aloud"].tap()
+        let pause = app.buttons["Pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        sleep(2)
+        let before = pause.value as? String ?? ""
+        // The "Ludwig Boltzmann expressed this idea…" paragraph.
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.32)).tap()
+        sleep(2)
+        let after = pause.value as? String ?? ""
+        snap("speech-tap-pdf")
+        print("PDF before=\(before) | after=\(after)")
+        XCTAssertTrue(pause.exists, "Reading stopped after tapping a word")
+        XCTAssertNotEqual(after, before, "Tapping a word did not move the reading")
+        XCTAssertFalse(after.hasPrefix("Entropy and the Second Law"), "Restarted from the top instead of the tapped word")
+        app.buttons["Stop"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        openFolder("Fiction")
+        open(bookMatching: "Pride and Prejudice")
+        XCTAssertTrue(app.buttons["Read aloud"].waitForExistence(timeout: 15))
+        sleep(3)
+        app.buttons["Read aloud"].tap()
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        sleep(2)
+        // A plain start reads from the top of the page; a tap low on the page must start somewhere else.
+        let fromTop = pause.value as? String ?? ""
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78)).tap()
+        sleep(2)
+        let now = pause.value as? String ?? ""
+        snap("speech-tap-epub")
+        print("EPUB fromTop=\(fromTop) | now=\(now)")
+        XCTAssertTrue(pause.exists, "Reading stopped after tapping a word")
+        XCTAssertFalse(now.isEmpty)
+        XCTAssertNotEqual(now, fromTop, "Tapping a word did not move the reading")
+        app.buttons["Stop"].tap()
+    }
+
+    /// .docx is converted natively, .doc through WebKit; both open as reflowable books with contents.
+    func testWordDocuments() throws {
+        openFolder("Word")
+        for (name, file) in [("Heat and Order (Word), DOCX", "docx"), ("Heat and Order, DOC", "doc")] {
+            open(bookMatching: name)
+            let text = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'never decreases'")).firstMatch
+            XCTAssertTrue(text.waitForExistence(timeout: 20), "\(file): text not shown")
+            sleep(1)
+            snap("word-\(file)-1-open")
+            XCTAssertTrue(app.buttons["Contents"].waitForExistence(timeout: 5), "\(file): no contents")
+            app.buttons["Contents"].tap()
+            let second = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Second chapter'")).firstMatch
+            XCTAssertTrue(second.waitForExistence(timeout: 5), "\(file): headings not in contents")
+            snap("word-\(file)-2-contents")
+            second.tap()
+            XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Энтропия'")).firstMatch
+                .waitForExistence(timeout: 10), "\(file): second chapter not shown")
+            snap("word-\(file)-3-chapter2")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+    }
+
     func testFileOperationsSwipeMoveSelectDelete() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .phone)
         openFolder("Physics")

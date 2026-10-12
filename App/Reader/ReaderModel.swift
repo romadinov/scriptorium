@@ -48,6 +48,29 @@ final class ReaderModel {
     /// Show the range being spoken (anchor from `speechParagraphs`); nil range clears.
     @ObservationIgnored var speechHighlight: (@MainActor (_ anchor: Int, _ range: NSRange?) -> Void)?
     @ObservationIgnored private var speechPage = 0
+    /// Page to start from when reading restarts at a tapped word (fixed layout).
+    @ObservationIgnored private var speechStartPage: Int?
+    /// Viewers that need to know (e.g. to turn taps into "read from here") listen here.
+    @ObservationIgnored var readingAloudChanged: (@MainActor (Bool) -> Void)?
+
+    var isReadingAloud: Bool { readAloud.state != .idle }
+
+    /// Tap on a word while reading aloud: carry on from that word.
+    func readAloud(fromAnchor anchor: Int, offset: Int) {
+        guard isReadingAloud else { return }
+        if reflowable == nil { speechStartPage = anchor }
+        readAloud.start(self, from: (anchor, offset))
+    }
+
+    /// Fixed-layout image pages (DjVu, scans): find the tapped word in the page's text.
+    func readAloud(fromPage page: Int, normalizedPoint point: CGPoint) {
+        guard isReadingAloud else { return }
+        Task {
+            guard let pageText = await text.availableText(page: page),
+                  let offset = pageText.characterOffset(at: point) else { return }
+            readAloud(fromAnchor: page, offset: offset)
+        }
+    }
 
     /// Position within the current page/chapter (0…1); reflowable books resume from it.
     var pageProgress: Double = 0
@@ -143,6 +166,7 @@ final class ReaderModel {
     static func load(book: Book, startPage: Int, startProgress: Double, ocrLanguages: [String],
                      highlightStore: HighlightStore) async throws -> ReaderModel {
         let url = book.url
+        try await WordDocConverter.convertIfNeeded(url)   // .doc: one-time conversion with WebKit
         let source = try await Task.detached(priority: .userInitiated) { try DocumentOpener.open(url) }.value
         let model = ReaderModel(book: book, source: source, startPage: startPage, ocrLanguages: ocrLanguages,
                                 highlightStore: highlightStore)
@@ -185,7 +209,12 @@ final class ReaderModel {
         guard reflowable == nil else { return }
         speechParagraphs = { [weak self] restart in
             guard let self else { return [] }
-            if restart { speechPage = currentPage } else { speechPage += 1 }
+            if restart {
+                speechPage = speechStartPage ?? currentPage
+                speechStartPage = nil
+            } else {
+                speechPage += 1
+            }
             while speechPage < source.pageCount {
                 if let text = await speechText(page: speechPage), text.rangeOfCharacter(from: .letters) != nil {
                     return [(text, speechPage)]

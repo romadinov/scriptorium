@@ -24,16 +24,47 @@ public enum SpeechPlanner {
 
     /// One chunk per paragraph; very long paragraphs are split at sentence boundaries so speech
     /// (and the on-page highlight) stays responsive.
-    public static func chunks(_ paragraphs: [(text: String, anchor: Int)], maxLength: Int = 1200) -> [Chunk] {
+    ///
+    /// `start` begins reading mid-text: paragraphs before `start.anchor` are skipped and that paragraph is
+    /// read from the word containing `start.offset` (UTF-16). Offsets in the chunks stay relative to the
+    /// whole paragraph, so highlights still land in the right place.
+    public static func chunks(_ paragraphs: [(text: String, anchor: Int)], maxLength: Int = 1200,
+                              startingAt start: (anchor: Int, offset: Int)? = nil) -> [Chunk] {
         var result: [Chunk] = []
-        for (text, anchor) in paragraphs {
+        var skipping = start != nil && paragraphs.contains { $0.anchor == start!.anchor }
+        for (fullText, anchor) in paragraphs {
+            var text = fullText
+            var base = 0
+            if skipping {
+                guard anchor == start!.anchor else { continue }
+                skipping = false
+                base = wordStart(in: fullText, at: start!.offset)
+                text = (fullText as NSString).substring(from: base)
+            }
             guard text.rangeOfCharacter(from: .letters) != nil else { continue }
-            let language = detectLanguage(text)
+            let language = detectLanguage(fullText)
             for piece in segments(text, maxLength: maxLength) where piece.text.rangeOfCharacter(from: .letters) != nil {
-                result.append(Chunk(text: piece.text, language: language, anchor: anchor, offset: piece.offset))
+                result.append(Chunk(text: piece.text, language: language, anchor: anchor, offset: base + piece.offset))
             }
         }
         return result
+    }
+
+    /// UTF-16 offset of the start of the word containing `offset` (or the next word if it's in a gap).
+    public static func wordStart(in text: String, at offset: Int) -> Int {
+        let ns = text as NSString
+        var i = min(max(0, offset), ns.length)
+        let letters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "'’-"))
+        func isWordChar(_ index: Int) -> Bool {
+            guard index >= 0, index < ns.length, let scalar = UnicodeScalar(ns.character(at: index)) else { return false }
+            return letters.contains(scalar)
+        }
+        if !isWordChar(i) {
+            while i < ns.length && !isWordChar(i) { i += 1 }   // tapped between words: take the next one
+            return i
+        }
+        while i > 0 && isWordChar(i - 1) { i -= 1 }
+        return i
     }
 
     public static func detectLanguage(_ text: String) -> String? {

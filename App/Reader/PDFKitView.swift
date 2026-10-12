@@ -32,6 +32,10 @@ struct PDFKitView: UIViewRepresentable {
         context.coordinator.attach(to: view)
         // Long-press on a web link → Add to Read Later / Open / Copy (text selection is unaffected elsewhere).
         view.addInteraction(UIContextMenuInteraction(delegate: context.coordinator))
+        // While reading aloud, a tap on a word continues reading from there.
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tappedWhileReading(_:)))
+        tap.delegate = context.coordinator
+        view.addGestureRecognizer(tap)
         return view
     }
 
@@ -44,7 +48,7 @@ struct PDFKitView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, UIContextMenuInteractionDelegate {
+    final class Coordinator: NSObject, UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate {
         let model: ReaderModel
         private var observers: [NSObjectProtocol] = []
         private weak var pdfView: PDFView?
@@ -53,6 +57,24 @@ struct PDFKitView: UIViewRepresentable {
         private var drawn: [UUID: [PDFAnnotation]] = [:]
 
         init(model: ReaderModel) { self.model = model }
+
+        // MARK: Read aloud from a tapped word
+
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            gesture is UITapGestureRecognizer ? model.isReadingAloud : true
+        }
+
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+        @objc func tappedWhileReading(_ gesture: UITapGestureRecognizer) {
+            guard let view = pdfView, let document = view.document else { return }
+            let point = gesture.location(in: view)
+            guard let page = view.page(for: point, nearest: false) else { return }
+            let index = page.characterIndex(at: view.convert(point, to: page))
+            guard index >= 0 else { return }
+            model.readAloud(fromAnchor: document.index(for: page), offset: index)
+        }
 
         // MARK: Link menu
 

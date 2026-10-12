@@ -13,6 +13,11 @@ cp "$SRC/Scanned.pdf" "$LIB/"
 [ -f "$SRC/Python 3.10 docs.chm" ] && cp "$SRC/Python 3.10 docs.chm" "$LIB/"
 cp "$SRC/Pride.epub" "$LIB/Fiction/Pride and Prejudice.epub"
 cp "$(dirname "$0")/../Packages/ReaderCore/Tests/ReaderCoreTests/Fixtures/sample.fb2" "$LIB/Fiction/Тепло и порядок.fb2"
+if [ -f "$SRC/Heat and Order.doc" ]; then
+  mkdir -p "$LIB/Word"
+  cp "$SRC/Heat and Order.doc" "$LIB/Word/"
+  [ -f "$SRC/Heat and Order (Word).docx" ] && cp "$SRC/Heat and Order (Word).docx" "$LIB/Word/"
+fi
 # Without an iCloud account the app uses Documents/Inbox; leave two books there for the sync test.
 INBOX="$DATA/Documents/Inbox"
 rm -rf "$INBOX"; mkdir -p "$INBOX/Physics" "$INBOX/From Inbox"

@@ -15,6 +15,8 @@ struct PagedImageView: UIViewRepresentable {
         let view = PagedImageScrollView(source: model.source, initialPage: model.currentPage)
         view.onPageChange = { [weak model] page in model?.currentPage = page }
         view.onSelectionChange = { [weak model] text in model?.selection = text }
+        view.canReadFromTap = { [weak model] in model?.isReadingAloud ?? false }
+        view.readFromTap = { [weak model] page, point in model?.readAloud(fromPage: page, normalizedPoint: point) }
         model.jumpToPage = { [weak view] page in view?.scroll(to: page, animated: false) }
         let text = model.text
         model.captureSelection = { [weak view] in
@@ -37,6 +39,8 @@ struct PagedImageView: UIViewRepresentable {
 final class PagedImageScrollView: UIScrollView, UIScrollViewDelegate {
     var onPageChange: ((Int) -> Void)?
     var onSelectionChange: ((String) -> Void)?
+    var canReadFromTap: (() -> Bool)?
+    var readFromTap: ((Int, CGPoint) -> Void)?
     private(set) var selectionPage: Int?
     private(set) var selectedText: String?
     var highlights: [Highlight] = [] {
@@ -144,6 +148,8 @@ final class PagedImageScrollView: UIScrollView, UIScrollViewDelegate {
             let view = pageViews[index] ?? {
                 let view = PageImageView(source: source, index: index)
                 view.onSelectionChange = { [weak self] text in self?.selectionChanged(text, on: index) }
+                view.canReadFromTap = { [weak self] in self?.canReadFromTap?() ?? false }
+                view.readFromTap = { [weak self] page, point in self?.readFromTap?(page, point) }
                 view.highlights = highlightsByPage[index] ?? []
                 content.addSubview(view)
                 pageViews[index] = view
@@ -200,8 +206,11 @@ final class PagedImageScrollView: UIScrollView, UIScrollViewDelegate {
 }
 
 /// One rendered page with a Live Text interaction attached.
-final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate {
+final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate, UIGestureRecognizerDelegate {
     var onSelectionChange: ((String) -> Void)?
+    /// While reading aloud, a tap on a word continues from there (page index, point normalised to the page).
+    var canReadFromTap: (() -> Bool)?
+    var readFromTap: ((Int, CGPoint) -> Void)?
     var highlights: [Highlight] = [] {
         didSet { if highlights != oldValue { setNeedsLayout() } }
     }
@@ -227,6 +236,10 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate {
         layer.shadowOffset = CGSize(width: 0, height: 1)
         interaction.delegate = self
         addInteraction(interaction)
+        isUserInteractionEnabled = true
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tappedWhileReading(_:)))
+        tap.delegate = self
+        addGestureRecognizer(tap)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -262,6 +275,22 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate {
 
     func clearSelection() {
         interaction.resetTextSelection()
+    }
+
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard gesture.view === self, gesture is UITapGestureRecognizer, gesture.delegate === self else {
+            return super.gestureRecognizerShouldBegin(gesture)
+        }
+        return canReadFromTap?() ?? false
+    }
+
+    func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+    @objc private func tappedWhileReading(_ gesture: UITapGestureRecognizer) {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let point = gesture.location(in: self)
+        readFromTap?(index, CGPoint(x: point.x / bounds.width, y: point.y / bounds.height))
     }
 
     /// Highlight rects are normalised to the page, so they follow zoom and rotation via layout.

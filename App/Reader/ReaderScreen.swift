@@ -610,6 +610,7 @@ private struct ReadAloudBar: View {
             Button(readAloud.state == .playing ? "Pause" : "Play",
                    systemImage: readAloud.state == .playing ? "pause.fill" : "play.fill") { readAloud.toggle() }
                 .labelStyle(.iconOnly).font(.title3).frame(width: 40, height: 36)
+                .accessibilityValue(readAloud.nowReading)
             Button("Stop", systemImage: "stop.fill") { readAloud.stop() }
                 .labelStyle(.iconOnly).frame(width: 36, height: 36)
             Divider().frame(height: 22)

@@ -96,6 +96,8 @@ struct HorizontalPageView: UIViewControllerRepresentable {
             let controller = ZoomablePageController(source: model.source, index: page)
             controller.pageView.highlights = pageHighlights(page)
             controller.pageView.onSelectionChange = { [weak self] text in self?.selectionChanged(text, page: page) }
+            controller.pageView.canReadFromTap = { [weak model] in model?.isReadingAloud ?? false }
+            controller.pageView.readFromTap = { [weak model] page, point in model?.readAloud(fromPage: page, normalizedPoint: point) }
             live.add(controller)
             return controller
         }

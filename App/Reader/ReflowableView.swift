@@ -135,6 +135,8 @@ struct ReflowableView: UIViewRepresentable {
                     self?.call("reader.speechClear()")
                 }
             }
+            model.readingAloudChanged = { [weak self] on in self?.call("reader.setReadingAloud(on)", ["on": on]) }
+            if model.isReadingAloud { call("reader.setReadingAloud(on)", ["on": true]) }
             model.clearSelection = { [weak self] in self?.call("reader.clearSelection()") }
             model.revealHighlight = { [weak self] highlight in
                 guard let self, case .text(let chapter, _, _, _, _) = highlight.location else { return }
@@ -150,6 +152,7 @@ struct ReflowableView: UIViewRepresentable {
             model.jumpToPosition = nil
             model.speechParagraphs = nil
             model.speechHighlight = nil
+            model.readingAloudChanged = nil
             model.visibleText = nil
             model.captureSelection = nil
             model.clearSelection = nil
@@ -319,6 +322,10 @@ struct ReflowableView: UIViewRepresentable {
                 Task { await insert(chapter, where: position) }
             case "selection":
                 model.selection = (body["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            case "speakFrom":
+                if let id = (body["id"] as? NSNumber)?.intValue, let offset = (body["offset"] as? NSNumber)?.intValue {
+                    model.readAloud(fromAnchor: id, offset: offset)
+                }
             case "tapHighlight":
                 if let id = (body["id"] as? String).flatMap(UUID.init(uuidString:)),
                    let highlight = model.highlights.first(where: { $0.id == id }) {

@@ -357,6 +357,16 @@
       post({ type: 'link', href: link.href });
       return;
     }
+    if (readingAloud && String(window.getSelection()) === '') {
+      const target = speechTarget(e.clientX, e.clientY);
+      if (target) {
+        e.preventDefault();
+        e.stopPropagation();
+        speechStartAt = target.el;
+        post({ type: 'speakFrom', id: target.id, offset: target.offset });
+        return;
+      }
+    }
     if (mark && String(window.getSelection()) === '') {
       post({ type: 'tapHighlight', id: mark.dataset.hl });
       return;
@@ -487,7 +497,29 @@
   // ---------- read aloud ----------
 
   const SPEECH_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, dd, dt, .stanza, figcaption';
-  let speechCursor = null, speechIds = 0;
+  let speechCursor = null, speechIds = 0, speechStartAt = null, readingAloud = false;
+
+  R.setReadingAloud = (on) => { readingAloud = !!on; };
+
+  /// While reading aloud, a tap on a word means "read from here": the block and the offset of the word.
+  function speechTarget(x, y) {
+    let node, offset;
+    if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(x, y);
+      if (pos) { node = pos.offsetNode; offset = pos.offset; }
+    } else if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(x, y);
+      if (r) { node = r.startContainer; offset = r.startOffset; }
+    }
+    if (!node) return null;
+    const el = (node.nodeType === 1 ? node : node.parentElement)?.closest(SPEECH_BLOCKS);
+    if (!el || !speakableBlocks().includes(el)) return null;
+    const before = document.createRange();
+    before.setStart(el, 0);
+    before.setEnd(node, offset);
+    if (!el.dataset.sid) el.dataset.sid = String(++speechIds);
+    return { el, id: Number(el.dataset.sid), offset: before.toString().length };
+  }
 
   function speakableBlocks() {
     return [...book().querySelectorAll(SPEECH_BLOCKS)]
@@ -499,7 +531,10 @@
   R.speechParagraphs = (restart, count) => {
     const all = speakableBlocks();
     let start;
-    if (restart || !speechCursor || !speechCursor.isConnected) {
+    if (restart && speechStartAt && speechStartAt.isConnected && all.includes(speechStartAt)) {
+      start = all.indexOf(speechStartAt);
+      speechStartAt = null;
+    } else if (restart || !speechCursor || !speechCursor.isConnected) {
       start = all.findIndex((el) => {
         const r = el.getBoundingClientRect();
         return paged() ? r.right > 1 && r.left < window.innerWidth : r.bottom > readingPoint().y;
