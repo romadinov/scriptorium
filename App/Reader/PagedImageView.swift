@@ -263,10 +263,12 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate, UIGest
             guard let self, let cg, !Task.isCancelled else { return }
             let image = UIImage(cgImage: cg)
             self.image = image
-            // Live Text analysis is the expensive part. Run it once per page (the result is in page
-            // coordinates, so a sharper re-render after zooming keeps it), and only for pages the reader
-            // stays on, not every page flicked past.
-            guard !self.analyzed else { return }
+            self.interaction.setContentsRectNeedsUpdate()
+            // Live Text analysis is the expensive part: only for pages the reader stays on, not every page
+            // flicked past, and not again while the interaction still holds an analysis (replacing the
+            // image can drop it — then the sharper image is analysed again, or nothing is selectable).
+            log.debug("Rendered page \(self.index) at \(cg.width)px, analysis kept=\(self.interaction.analysis != nil)")
+            guard self.interaction.analysis == nil else { return }
             try? await Task.sleep(for: .milliseconds(600))
             guard !Task.isCancelled else { return }
             await self.analyze(image)
@@ -296,6 +298,9 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate, UIGest
     /// Highlight rects are normalised to the page, so they follow zoom and rotation via layout.
     override func layoutSubviews() {
         super.layoutSubviews()
+        // VisionKit caches where the image sits in the view; after a size change it would only map
+        // touches onto part of the page (long-press then selects nothing in the lower part).
+        if interaction.analysis != nil { interaction.setContentsRectNeedsUpdate() }
         highlightLayers.forEach { $0.removeFromSuperlayer() }
         highlightLayers = highlights.flatMap { highlight -> [CALayer] in
             guard case .image(_, let rects) = highlight.location else { return [] }
@@ -313,8 +318,6 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate, UIGest
         highlightLayers.forEach(layer.addSublayer)
     }
 
-    private var analyzed = false
-
     private func analyze(_ image: UIImage) async {
         guard ImageAnalyzer.isSupported else {
             log.error("ImageAnalyzer not supported on this device; Live Text selection disabled")
@@ -329,9 +332,9 @@ final class PageImageView: UIImageView, ImageAnalysisInteractionDelegate, UIGest
             return
         }
         guard !Task.isCancelled else { return }
-        log.debug("Live Text ready for page \(self.index), hasText=\(analysis.hasResults(for: .text))")
+        log.debug("Live Text ready for page \(self.index), hasText=\(analysis.hasResults(for: .text)), \(analysis.transcript.count) chars, image \(Int(image.size.width))x\(Int(image.size.height)) scale \(image.scale), view \(Int(self.bounds.width))x\(Int(self.bounds.height)), ends: \(String(analysis.transcript.suffix(60)), privacy: .public)")
         interaction.analysis = analysis
-        analyzed = true
+        interaction.setContentsRectNeedsUpdate()
         // Must be set after the analysis, or the interaction ignores touches.
         interaction.preferredInteractionTypes = .textSelection
         // The app's own selection bar replaces VisionKit's corner Live Text button.

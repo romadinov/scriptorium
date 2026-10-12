@@ -96,10 +96,11 @@ public struct ReadLaterList: Sendable {
         var added = false
         var inner: Error?
         var coordinationError: NSError?
+        SharedTextFile.waitUntilCurrent(file)
         NSFileCoordinator().coordinate(writingItemAt: file, options: .forMerging, error: &coordinationError) { url in
             do {
                 try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                var text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                var text = SharedTextFile.currentText(at: url)
                 if TaskPaper.items(in: text, project: Self.projectName)
                     .contains(where: { $0.tags["url"] == TaskPaper.tagValue(entry.url) && $0.tags["done"] == nil }) {
                     return
@@ -188,10 +189,11 @@ public struct ImprovementNotes: Sendable {
 
         var inner: Error?
         var coordinationError: NSError?
+        SharedTextFile.waitUntilCurrent(file)
         NSFileCoordinator().coordinate(writingItemAt: file, options: .forMerging, error: &coordinationError) { url in
             do {
                 try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                var content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                var content = SharedTextFile.currentText(at: url)
                 if content.isEmpty { content = TaskPaper.project(Self.projectName) + "\n" }
                 if !content.hasSuffix("\n") { content += "\n" }
                 content += entry + "\n"
@@ -200,5 +202,59 @@ public struct ImprovementNotes: Sendable {
         }
         if let error = coordinationError ?? inner { throw error }
         return attachment
+    }
+}
+
+/// Text files edited both here and elsewhere (another device, or a Mac) through iCloud Drive. Appending
+/// from a stale local copy would overwrite the other side's edits, so wait for the latest version first,
+/// and fold any conflict versions iCloud kept back in (line by line; a line marked @done wins).
+enum SharedTextFile {
+    static func waitUntilCurrent(_ url: URL, timeout: TimeInterval = 8) {
+        guard (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true else { return }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            var copy = url
+            copy.removeAllCachedResourceValues()
+            let status = (try? copy.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?.ubiquitousItemDownloadingStatus
+            if status == .current { return }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+    }
+
+    /// The file's text with unresolved conflict versions merged in (and resolved). Call inside a write coordination.
+    static func currentText(at url: URL) -> String {
+        var text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: url) ?? []
+        for version in conflicts {
+            if let other = try? String(contentsOf: version.url, encoding: .utf8) { text = merge(text, other) }
+            version.isResolved = true
+        }
+        if !conflicts.isEmpty { try? NSFileVersion.removeOtherVersionsOfItem(at: url) }
+        return text
+    }
+
+    /// Lines of `b` missing from `a` are added after the line they followed in `b`; when the same item
+    /// appears in both and only one copy carries @done(...) tags, that copy is kept.
+    static func merge(_ a: String, _ b: String) -> String {
+        func key(_ line: String) -> String {
+            line.replacingOccurrences(of: #"\s@(done|fix)(\([^)]*\))?"#, with: "", options: .regularExpression)
+        }
+        var lines = a.components(separatedBy: "\n")
+        var index = Dictionary(lines.enumerated().map { (key($0.element), $0.offset) }, uniquingKeysWith: { first, _ in first })
+        var previous: Int?
+        for line in b.components(separatedBy: "\n") {
+            let k = key(line)
+            if let i = index[k] {
+                if line.contains("@done"), !lines[i].contains("@done") { lines[i] = line }
+                previous = i
+            } else if !line.isEmpty {
+                let at = previous.map { $0 + 1 } ?? lines.count
+                lines.insert(line, at: at)
+                index = Dictionary(lines.enumerated().map { (key($0.element), $0.offset) }, uniquingKeysWith: { first, _ in first })
+                previous = at
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 }

@@ -468,7 +468,7 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Highlights & Notes"].waitForExistence(timeout: 3))
         snap("iphone-5-reader-menu")
         app.buttons["Highlights & Notes"].tap()
-        XCTAssertTrue(app.staticTexts["Notes"].waitForExistence(timeout: 5) || app.navigationBars["Notes"].exists)
+        XCTAssertTrue(app.buttons["Bookmarks"].waitForExistence(timeout: 5), "Contents/Bookmarks/Highlights panel did not open")
         app.swipeDown(velocity: .fast)
         sleep(1)
         app.buttons["Assistant"].tap()
@@ -584,6 +584,37 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertNil(words.label.unicodeScalars.first { $0.value < 0x20 && $0.value != 0x0A && $0.value != 0x09 },
                      "Control characters left in the text: \(words.label.debugDescription)")
         app.navigationBars.buttons.element(boundBy: 0).tap()
+    }
+
+    /// Needs a Russian scanned DjVu at Physics/Russian scan.djvu (copied in by hand; not in the repo).
+    func testDjVuRussianSelectionHorizontal() throws { try russianDjVuSelection(swipes: 4) }
+    func testDjVuRussianSelectionVertical() throws { try russianDjVuSelection() }
+    func testDjVuRussianSelectionAfterGoToPage() throws { try russianDjVuSelection(goTo: 11) }
+    func testDjVuRussianSelectionHorizontalAfterSwipes() throws { try russianDjVuSelection(goTo: 9, swipes: 2) }
+
+    private func russianDjVuSelection(goTo: Int? = nil, swipes: Int = 0) throws {
+        openFolder("Physics")
+        let book = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Russian scan'")).firstMatch
+        try XCTSkipUnless(book.waitForExistence(timeout: 5), "No Russian scan on this simulator")
+        book.tap()
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 15))
+        sleep(3)
+        if let goTo {
+            indicator.tap()
+            let field = app.textFields["Go to page"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText("\(goTo)\n")
+        }
+        for _ in 0..<swipes { app.swipeLeft(); sleep(1) }
+        sleep(4)
+        snap("djvu-ru-1-page-\(goTo ?? swipes)")
+        let y = goTo == nil && swipes == 0 ? 0.20 : 0.40             // title page: the author line
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: y)).press(forDuration: 1.2)
+        sleep(1)
+        snap("djvu-ru-2-after-press")
+        XCTAssertTrue(app.buttons["Highlight"].waitForExistence(timeout: 5), "Long press did not select text")
     }
 
     func testKindleAZW3() throws {
@@ -784,6 +815,21 @@ final class ReaderFlowTests: XCTestCase {
         app.buttons["Bookmark this page"].tap()
         XCTAssertTrue(app.buttons["Remove bookmark"].waitForExistence(timeout: 5), "Bookmark icon did not fill")
         snap("bookmarks-1-marked")
+
+        // In the book: Contents › Bookmarks lists it and jumps there.
+        indicator.tap()                                    // page picker → move away from page 2 first
+        let goField = app.textFields["Go to page"]
+        XCTAssertTrue(goField.waitForExistence(timeout: 5))
+        goField.tap()
+        goField.typeText("1\n")
+        XCTAssertTrue(app.buttons["Contents"].waitForExistence(timeout: 5))
+        app.buttons["Contents"].tap()
+        app.buttons["Bookmarks"].tap()
+        let mark = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'p. 2'")).firstMatch
+        XCTAssertTrue(mark.waitForExistence(timeout: 5), "Bookmark not in Contents › Bookmarks")
+        snap("bookmarks-1b-contents-tab")
+        mark.tap()
+        XCTAssertEqual(indicator.label, "Page 2 of 3", "Bookmark did not open its page")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
 

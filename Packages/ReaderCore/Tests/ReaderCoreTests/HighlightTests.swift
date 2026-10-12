@@ -162,3 +162,11 @@ private func label(_ location: Highlight.Location) -> String {
     #expect(text.contains("@where(Scan, p. 3) @file(Physics/Old scan.djvu) @build(1.0 [6])"))
     #expect(FileManager.default.fileExists(atPath: notes.attachmentsDirectory.appending(path: try #require(shot)).path))
 }
+
+@Test func sharedTextMergeKeepsBothSidesAndDoneMarks() {
+    let mac = "Improvement notes:\n\t- First @date(1) @done(2026-10-12) @fix(x)\n\t- Second @date(2)\n"
+    let iPad = "Improvement notes:\n\t- First @date(1)\n\t- Second @date(2)\n\t- Third @date(3)\n"
+    let merged = SharedTextFile.merge(iPad, mac)
+    #expect(merged == "Improvement notes:\n\t- First @date(1) @done(2026-10-12) @fix(x)\n\t- Second @date(2)\n\t- Third @date(3)\n")
+    #expect(SharedTextFile.merge(mac, iPad) == merged)
+}

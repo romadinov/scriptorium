@@ -128,26 +128,12 @@ private struct ReaderContent: View {
         .toolbar {
             if compact { compactToolbar } else { toolbar }
         }
-        .sheet(isPresented: compactOnly($showOutline)) {
-            NavigationStack {
-                OutlineView(items: model.source.outline) { page in
-                    model.go(to: page)
-                    showOutline = false
-                }
-                .navigationTitle("Contents").navigationBarTitleDisplayMode(.inline)
-            }
-        }
+        .sheet(isPresented: compactOnly($showOutline)) { bookIndex(.contents) }
         .sheet(isPresented: compactOnly($showPagePicker)) {
-            PagePicker(model: model).padding().presentationDetents([.height(260)])
+            PagePicker(model: model, onDone: { showPagePicker = false }).padding().presentationDetents([.height(260)])
         }
         .sheet(isPresented: compactOnly($showHighlights)) {
-            HighlightsList(model: model, onSelect: { highlight in
-                showHighlights = false
-                model.reveal(highlight)
-            }, onSelectBookmark: { bookmark in
-                showHighlights = false
-                model.open(bookmark)
-            }, onAnnotate: annotateFromList)
+            bookIndex(.highlights)
         }
         .inspector(isPresented: $showAssistant) {
             AssistantPanel(model: model, onClose: { showAssistant = false })
@@ -202,16 +188,8 @@ private struct ReaderContent: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
-            if !model.source.outline.isEmpty {
-                Button("Contents", systemImage: "list.bullet") { showOutline = true }
-                    .popover(isPresented: $showOutline) {
-                        OutlineView(items: model.source.outline) { page in
-                            model.go(to: page)
-                            showOutline = false
-                        }
-                        .frame(minWidth: 320, minHeight: 400)
-                    }
-            }
+            Button("Contents", systemImage: "list.bullet") { showOutline = true }
+                .popover(isPresented: $showOutline) { bookIndex(.contents).frame(minWidth: 360, minHeight: 460) }
             if model.reflowable != nil && model.source.pageCount > 1 {
                 Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1, remember: false) }
                     .disabled(model.currentPage == 0)
@@ -220,7 +198,7 @@ private struct ReaderContent: View {
                 .monospacedDigit()
                 .accessibilityLabel(pageAccessibilityLabel)
                 .popover(isPresented: $showPagePicker) {
-                    PagePicker(model: model).padding().frame(width: 320)
+                    PagePicker(model: model, onDone: { showPagePicker = false }).padding().frame(width: 320)
                 }
             if model.reflowable != nil && model.source.pageCount > 1 {
                 Button("Next chapter", systemImage: "chevron.right") { model.go(to: model.currentPage + 1, remember: false) }
@@ -268,16 +246,7 @@ private struct ReaderContent: View {
                 if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
             }
             Button("Highlights", systemImage: "highlighter") { showHighlights = true }
-                .popover(isPresented: $showHighlights) {
-                    HighlightsList(model: model, onSelect: { highlight in
-                        showHighlights = false
-                        model.reveal(highlight)
-                    }, onSelectBookmark: { bookmark in
-                        showHighlights = false
-                        model.open(bookmark)
-                    }, onAnnotate: annotateFromList)
-                    .frame(minWidth: 360, minHeight: 440)
-                }
+                .popover(isPresented: $showHighlights) { bookIndex(.highlights).frame(minWidth: 360, minHeight: 460) }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
@@ -285,8 +254,26 @@ private struct ReaderContent: View {
         }
     }
 
+    /// Contents, bookmarks and highlights in one panel (like Apple Books), opened on `tab`.
+    private func bookIndex(_ tab: HighlightsList.Tab) -> some View {
+        HighlightsList(model: model, initialTab: tab, onSelectPage: { page in
+            showOutline = false
+            showHighlights = false
+            model.go(to: page)
+        }, onSelect: { highlight in
+            showOutline = false
+            showHighlights = false
+            model.reveal(highlight)
+        }, onSelectBookmark: { bookmark in
+            showOutline = false
+            showHighlights = false
+            model.open(bookmark)
+        }, onAnnotate: annotateFromList)
+    }
+
     /// The list is a popover/sheet; let it close before the note editor sheet opens.
     private func annotateFromList(_ target: AnnotationTarget) {
+        showOutline = false
         showHighlights = false
         Task {
             try? await Task.sleep(for: .milliseconds(450))
@@ -328,9 +315,7 @@ private struct ReaderContent: View {
     @ToolbarContentBuilder
     private var compactToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
-            if !model.source.outline.isEmpty {
-                Button("Contents", systemImage: "list.bullet") { showOutline = true }
-            }
+            Button("Contents", systemImage: "list.bullet") { showOutline = true }
             Button(pageLabel) { showPagePicker = true }
                 .monospacedDigit()
                 .accessibilityLabel(pageAccessibilityLabel)
@@ -400,24 +385,42 @@ private struct ReaderContent: View {
     }
 }
 
-private struct HighlightsList: View {
+struct HighlightsList: View {
+    enum Tab: Hashable { case contents, bookmarks, highlights }
+
     let model: ReaderModel
+    let onSelectPage: (Int) -> Void
     let onSelect: (Highlight) -> Void
     let onSelectBookmark: (Bookmark) -> Void
     let onAnnotate: (AnnotationTarget) -> Void
-    @State private var tab = 0
+    @State private var tab: Tab
+
+    init(model: ReaderModel, initialTab: Tab, onSelectPage: @escaping (Int) -> Void, onSelect: @escaping (Highlight) -> Void,
+         onSelectBookmark: @escaping (Bookmark) -> Void, onAnnotate: @escaping (AnnotationTarget) -> Void) {
+        self.model = model
+        self.onSelectPage = onSelectPage
+        self.onSelect = onSelect
+        self.onSelectBookmark = onSelectBookmark
+        self.onAnnotate = onAnnotate
+        _tab = State(initialValue: initialTab)
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 Picker("Show", selection: $tab) {
-                    Text("Highlights").tag(0)
-                    Text("Pages").tag(1)
+                    Text("Contents").tag(Tab.contents)
+                    Text("Bookmarks").tag(Tab.bookmarks)
+                    Text("Highlights").tag(Tab.highlights)
                 }
                 .pickerStyle(.segmented).padding([.horizontal, .top])
-                if tab == 0 { highlightList } else { bookmarkList }
+                switch tab {
+                case .contents: contentsList
+                case .bookmarks: bookmarkList
+                case .highlights: highlightList
+                }
             }
-            .navigationTitle("Notes")
+            .navigationTitle(model.book.title)
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 if !model.highlightLocationDescription.isEmpty {
@@ -425,6 +428,16 @@ private struct HighlightsList: View {
                         .font(.footnote).foregroundStyle(.secondary).padding(8)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var contentsList: some View {
+        if model.source.outline.isEmpty {
+            ContentUnavailableView("No table of contents", systemImage: "list.bullet",
+                                   description: Text("This book doesn't include one. Use the page number at the top to jump to a page."))
+        } else {
+            OutlineView(items: model.source.outline, onSelect: onSelectPage)
         }
     }
 
@@ -706,6 +719,9 @@ private struct OCRProgressPill: View {
 
 private struct PagePicker: View {
     let model: ReaderModel
+    /// Close the picker: after typing a page number the reader wants the page, not the picker. (Left
+    /// open, the next touch on the page only dismissed it — a long-press then selected nothing.)
+    var onDone: () -> Void = {}
     @State private var value: Double = 1
     @State private var typed = ""
     @FocusState private var fieldFocused: Bool
@@ -753,6 +769,7 @@ private struct PagePicker: View {
         value = Double(min(max(1, page), total))
         go(to: page)
         fieldFocused = false
+        onDone()
     }
 }
 
