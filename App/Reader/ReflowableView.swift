@@ -11,6 +11,36 @@ enum ReflowLayout: String, CaseIterable, Identifiable {
 
 /// EPUB/FB2 viewer: one continuous document (see ReflowEngine.js) with chapters loaded around
 /// the reading position, laid out as horizontally swiped pages or a vertical scroll.
+#if os(macOS)
+struct ReflowableView: NSViewRepresentable {
+    let model: ReaderModel
+    let book: ReflowableSource
+    let layout: ReflowLayout
+    let fontScale: Double
+    /// Adds the reader's items (Highlight, Note, Ask…) to the right-click menu; `link` is the link under the mouse.
+    var contextMenu: ((NSMenu, _ link: URL?) -> Void)?
+
+    func makeCoordinator() -> Coordinator { Coordinator(model: model, book: book, layout: layout) }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let webView = makeWebView(context: context)
+        webView.underPageBackgroundColor = .textBackgroundColor
+        webView.extendMenu = { [weak coordinator = context.coordinator] menu in
+            coordinator?.contextMenu?(menu, coordinator?.lastContextLink)
+        }
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.contextMenu = contextMenu
+        update(context: context)
+    }
+
+    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+        dismantle(webView, coordinator: coordinator)
+    }
+}
+#else
 struct ReflowableView: UIViewRepresentable {
     let model: ReaderModel
     let book: ReflowableSource
@@ -20,18 +50,10 @@ struct ReflowableView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(model: model, book: book, layout: layout) }
 
     func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        let controller = configuration.userContentController
-        controller.addUserScript(WKUserScript(source: Self.engine, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        controller.add(WeakMessageHandler(context.coordinator), name: "reader")
-        configuration.dataDetectorTypes = []
-
-        let webView = ReaderWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = context.coordinator
-        webView.uiDelegate = context.coordinator
+        let webView = makeWebView(context: context)
+        webView.configuration.dataDetectorTypes = []
         webView.isOpaque = false
         webView.backgroundColor = .systemBackground
-        webView.isInspectable = true
         let scrollView = webView.scrollView
         if layout == .paged {
             // The page owns the full height; the native scroll view snaps one screen per swipe.
@@ -44,6 +66,30 @@ struct ReflowableView: UIViewRepresentable {
             scrollView.contentInsetAdjustmentBehavior = .automatic
             scrollView.showsHorizontalScrollIndicator = false
         }
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        update(context: context)
+    }
+
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        dismantle(webView, coordinator: coordinator)
+    }
+}
+#endif
+
+extension ReflowableView {
+    @MainActor
+    fileprivate func makeWebView(context: Context) -> ReaderWebView {
+        let configuration = WKWebViewConfiguration()
+        let controller = configuration.userContentController
+        controller.addUserScript(WKUserScript(source: Self.engine, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        controller.add(WeakMessageHandler(context.coordinator), name: "reader")
+        let webView = ReaderWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.isInspectable = true
         context.coordinator.webView = webView
         context.coordinator.fontScale = fontScale
         context.coordinator.install()
@@ -52,7 +98,8 @@ struct ReflowableView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {
+    @MainActor
+    fileprivate func update(context: Context) {
         let coordinator = context.coordinator
         if coordinator.fontScale != fontScale {
             coordinator.fontScale = fontScale
@@ -62,7 +109,8 @@ struct ReflowableView: UIViewRepresentable {
         coordinator.sync(highlights: model.highlights)
     }
 
-    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+    @MainActor
+    fileprivate static func dismantle(_ webView: WKWebView, coordinator: Coordinator) {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "reader")
         coordinator.uninstall()
         coordinator.paginator.cancel()
@@ -79,6 +127,11 @@ struct ReflowableView: UIViewRepresentable {
         private var syncedHighlights: [Highlight] = []
         private var loading: Set<Int> = []
         let paginator: Paginator
+        #if os(macOS)
+        var contextMenu: ((NSMenu, URL?) -> Void)?
+        /// The link under the mouse at the last right-click (reported by the page before the menu opens).
+        var lastContextLink: URL?
+        #endif
 
         init(model: ReaderModel, book: ReflowableSource, layout: ReflowLayout) {
             self.model = model
@@ -93,10 +146,12 @@ struct ReflowableView: UIViewRepresentable {
         func repaginate() {
             guard ready, let webView, let host = webView.superview else { return }
             var size = webView.bounds.size
+            #if os(iOS)
             if layout == .scroll {
                 let insets = webView.scrollView.adjustedContentInset
                 size.height -= insets.top + insets.bottom
             }
+            #endif
             model.measuredPages = [:]
             paginator.start(in: host, size: size, scale: fontScale)
         }
@@ -106,6 +161,7 @@ struct ReflowableView: UIViewRepresentable {
         func install() {
             model.jumpToPage = { [weak self] index in self?.go(to: index, progress: 0, fragment: nil) }
             model.jumpToPosition = { [weak self] chapter, progress in self?.go(to: chapter, progress: progress, fragment: nil) }
+            model.turnPage = { [weak self] delta in self?.turnPage(delta) }
             // Text lengths drive page estimates until the paginator has real counts.
             let book = book
             Task { [weak model] in
@@ -150,6 +206,7 @@ struct ReflowableView: UIViewRepresentable {
         func uninstall() {
             model.jumpToPage = nil
             model.jumpToPosition = nil
+            model.turnPage = nil
             model.speechParagraphs = nil
             model.speechHighlight = nil
             model.readingAloudChanged = nil
@@ -270,8 +327,13 @@ struct ReflowableView: UIViewRepresentable {
             return (location, text)
         }
 
-        // MARK: Long-press on links
+        /// Previous/next screen in paged layout (keyboard on the Mac).
+        func turnPage(_ delta: Int) {
+            call("reader.turnPage(d)", ["d": delta])
+        }
 
+        // MARK: Long-press on links
+        #if os(iOS)
         func webView(_ webView: WKWebView, contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
                      completionHandler: @escaping @MainActor (UIContextMenuConfiguration?) -> Void) {
             guard let url = elementInfo.linkURL else { return completionHandler(nil) }
@@ -305,6 +367,7 @@ struct ReflowableView: UIViewRepresentable {
                 })
             }
         }
+        #endif
 
         // MARK: Messages from the page
 
@@ -331,6 +394,10 @@ struct ReflowableView: UIViewRepresentable {
                    let highlight = model.highlights.first(where: { $0.id == id }) {
                     model.tappedHighlight = highlight
                 }
+            case "contextLink":
+                #if os(macOS)
+                lastContextLink = (body["href"] as? String).flatMap(URL.init(string:))
+                #endif
             case "link":
                 guard let href = body["href"] as? String, let url = URL(string: href) else { return }
                 if url.isFileURL {
@@ -339,7 +406,11 @@ struct ReflowableView: UIViewRepresentable {
                         go(to: chapter, progress: 0, fragment: url.fragment)
                     }
                 } else {
+                    #if os(macOS)
+                    NSWorkspace.shared.open(url)
+                    #else
                     UIApplication.shared.open(url)
+                    #endif
                 }
             default:
                 break

@@ -6,6 +6,7 @@ DEVICE=${1:?device id}; SRC=${2:?folder with sample books}
 DATA=$(xcrun simctl get_app_container "$DEVICE" com.romadinov.reader data)
 LIB="$DATA/Documents/Books"
 rm -rf "$LIB"; mkdir -p "$LIB/Physics" "$LIB/Fiction"
+rm -f "$DATA/Documents/Read Later.md"            # tests add links and expect "Added", not "Already in"
 cp "$SRC/Thermodynamics.pdf" "$SRC/Thermodynamics.djvu" "$LIB/Physics/"
 [ -f "$SRC/Linked.pdf" ] && cp "$SRC/Linked.pdf" "$LIB/Physics/Linked.pdf"
 cp "$SRC/Scanned.pdf" "$LIB/"

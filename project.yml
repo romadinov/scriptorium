@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.romadinov
   deploymentTarget:
     iOS: "26.0"
+    macOS: "26.0"
   createIntermediateGroups: true
 
 packages:
@@ -31,7 +32,7 @@ targets:
         MARKETING_VERSION: "1.0"
         # Raise for every install (scripts/bump-build.sh): iCloud only re-reads NSUbiquitousContainers
         # (the "Scriptorium" folder in iCloud Drive) when the build number changes.
-        CURRENT_PROJECT_VERSION: "14"
+        CURRENT_PROJECT_VERSION: "15"
         CODE_SIGN_ENTITLEMENTS: App/Scriptorium.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -134,6 +135,96 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension: [azw3]
               public.mime-type: [application/vnd.amazon.mobi8-ebook]
+
+
+  ScriptoriumMac:
+    type: application
+    platform: macOS
+    scheme:
+      testTargets: [ScriptoriumMacUITests]
+    sources:
+      - Mac
+      - App/Shared
+      - App/Settings/SettingsStore.swift
+      - App/Library/LibraryStore.swift
+      - App/Library/InboxAutomation.swift
+      - App/Reader/ReaderModel.swift
+      - App/Reader/ReadAloud.swift
+      - App/Reader/AssistantPanel.swift
+      - App/Reader/WordDocConverter.swift
+      - App/Reader/ReflowableView.swift
+      - App/Reader/Paginator.swift
+      - App/Reader/PDFKitView.swift
+      - path: App/Reader/ReflowEngine.js
+        buildPhase: resources
+    dependencies:
+      - package: ReaderCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.romadinov.reader.mac
+        PRODUCT_NAME: Scriptorium
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "15"
+        # scripts/test-mac.sh sets MAC_ENTITLEMENTS=ScriptoriumMac-Local (ad hoc signing, no iCloud).
+        MAC_ENTITLEMENTS: ScriptoriumMac
+        CODE_SIGN_ENTITLEMENTS: Mac/$(MAC_ENTITLEMENTS).entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.books
+    info:
+      path: Mac/Info.plist
+      properties:
+        CFBundleDisplayName: Scriptorium
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.romadinov.reader.open
+            CFBundleURLSchemes: [scriptorium]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf, org.djvu.djvu, org.idpf.epub-container, com.apple.webarchive,
+                                 com.microsoft.chm, org.gribuser.fb2, com.amazon.azw3,
+                                 org.openxmlformats.wordprocessingml.document, com.microsoft.word.doc]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.djvu.djvu
+            UTTypeDescription: DjVu Document
+            UTTypeConformsTo: [public.data, public.image]
+            UTTypeTagSpecification:
+              public.filename-extension: [djvu, djv]
+              public.mime-type: [image/vnd.djvu, image/x-djvu]
+          - UTTypeIdentifier: com.microsoft.chm
+            UTTypeDescription: Compiled HTML Help
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [chm]
+          - UTTypeIdentifier: org.gribuser.fb2
+            UTTypeDescription: FictionBook
+            UTTypeConformsTo: [public.xml, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [fb2]
+          - UTTypeIdentifier: com.amazon.azw3
+            UTTypeDescription: Kindle Book (AZW3)
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [azw3]
+  ScriptoriumMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [MacUITests]
+    dependencies:
+      - target: ScriptoriumMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.romadinov.reader.mac.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
 
   ReaderUITests:
     type: bundle.ui-testing

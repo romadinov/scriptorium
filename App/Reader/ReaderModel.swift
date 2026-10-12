@@ -83,6 +83,8 @@ final class ReaderModel {
     var measuredPages: [Int: Int] = [:]
     var chapterLengths: [Int] = []
     @ObservationIgnored var jumpToPosition: ((Int, Double) -> Void)?
+    /// Previous/next screen in a reflowable book's paged layout (keyboard on the Mac).
+    @ObservationIgnored var turnPage: ((Int) -> Void)?
 
     var chapterPages: [Int] {
         let count = source.pageCount

@@ -97,7 +97,9 @@ final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
         if state != .idle { model?.speechHighlight?(-1, nil) }
         state = .idle
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
     }
 
     // MARK: Queue
@@ -176,9 +178,11 @@ final class ReadAloud: NSObject, AVSpeechSynthesizerDelegate {
     // MARK: Audio session & lock screen
 
     private func activateAudio(title: String) {
+        #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         try? session.setActive(true)
+        #endif
         guard !remoteCommandsInstalled else { return }
         remoteCommandsInstalled = true
         let commands = MPRemoteCommandCenter.shared()

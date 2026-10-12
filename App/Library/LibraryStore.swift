@@ -71,7 +71,10 @@ final class LibraryStore {
     }
 
     init() {
+        // The iCloud Inbox is iPad-only; on the Mac the library is just local.
+        #if os(iOS)
         Task { await resolveInbox() }
+        #endif
     }
 
     private func resolveInbox() async {
@@ -87,8 +90,10 @@ final class LibraryStore {
 
     /// Foreground: watch the Inbox and import new books as they arrive.
     func startWatchingInbox() {
+        #if os(iOS)
         let background = InboxBackgroundImport.takeBackgroundImports()
         if !background.isEmpty { autoImported += background }
+        #endif
         guard let inbox else { return }
         watcher.start(inbox: inbox.inbox, isCloud: inboxIsCloud)
         Task { await autoImport() }   // anything that arrived while we were away

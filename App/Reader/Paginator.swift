@@ -1,6 +1,10 @@
 import ReaderCore
-import UIKit
 import WebKit
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// Counts how many pages each chapter of a reflowable book takes at the current size, font and layout,
 /// using a hidden web view with the same engine. Results are cached per book/size/font/layout.
@@ -20,7 +24,7 @@ final class Paginator: NSObject, WKNavigationDelegate {
     }
 
     /// (Re)measures for a viewport size and font scale; cached results are delivered immediately.
-    func start(in host: UIView, size: CGSize, scale: Double) {
+    func start(in host: PlatformView, size: CGSize, scale: Double) {
         guard size.width > 50, size.height > 50 else { return }
         let key = "\(book.url.lastPathComponent)|\(book.pageCount)|\(layout.rawValue)|\(scale)|\(Int(size.width))x\(Int(size.height))|v1"
         guard key != self.key else { return }
@@ -38,11 +42,19 @@ final class Paginator: NSObject, WKNavigationDelegate {
             WKUserScript(source: ReflowableView.engine, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         configuration.userContentController.add(NullMessageHandler(), name: "reader")
         let view = WKWebView(frame: CGRect(origin: .zero, size: size), configuration: configuration)
+        #if os(macOS)
+        view.alphaValue = 0.01                  // laid out and rendered, but not visible
+        #else
         view.alpha = 0.01                       // laid out and rendered, but not visible or touchable
         view.isUserInteractionEnabled = false
         view.scrollView.contentInsetAdjustmentBehavior = .never
+        #endif
         view.navigationDelegate = self
+        #if os(macOS)
+        host.addSubview(view, positioned: .below, relativeTo: nil)
+        #else
         host.insertSubview(view, at: 0)
+        #endif
         webView = view
 
         let shell = book.contentRoot.appending(path: ".scriptorium-measure.html")
@@ -114,9 +126,29 @@ private final class NullMessageHandler: NSObject, WKScriptMessageHandler {
 final class ReaderWebView: WKWebView {
     var onSizeChange: ((CGSize) -> Void)?
     private var lastSize: CGSize = .zero
+    #if os(macOS)
+    /// Lets the reader add its items to the right-click menu.
+    var extendMenu: ((NSMenu) -> Void)?
 
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        extendMenu?(menu)
+    }
+    #endif
+
+    #if os(macOS)
+    override func layout() {
+        super.layout()
+        sizeChanged()
+    }
+    #else
     override func layoutSubviews() {
         super.layoutSubviews()
+        sizeChanged()
+    }
+    #endif
+
+    private func sizeChanged() {
         if bounds.size != lastSize {
             lastSize = bounds.size
             onSizeChange?(bounds.size)

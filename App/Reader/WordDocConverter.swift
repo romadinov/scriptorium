@@ -1,5 +1,9 @@
 import ReaderCore
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 import WebKit
 import os
 
@@ -24,10 +28,25 @@ final class WordDocConverter: NSObject, WKNavigationDelegate {
         view.navigationDelegate = self
         webView = view
         defer { webView = nil }
+        #if os(macOS)
+        // WebKit on the Mac doesn't render Word files, but AppKit reads them; its HTML then goes through
+        // the same clean-up below (headings from rendered sizes).
+        let attributed = try NSAttributedString(url: url, options: [.documentType: NSAttributedString.DocumentType.docFormat],
+                                                documentAttributes: nil)
+        let data = try attributed.data(from: NSRange(location: 0, length: attributed.length),
+                                       documentAttributes: [.documentType: NSAttributedString.DocumentType.html,
+                                                            .characterEncoding: String.Encoding.utf8.rawValue])
+        let source = String(decoding: data, as: UTF8.self)
+        try await withCheckedThrowingContinuation { continuation in
+            finished = continuation
+            view.loadHTMLString(source, baseURL: nil)
+        }
+        #else
         try await withCheckedThrowingContinuation { continuation in
             finished = continuation
             view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         }
+        #endif
         // The converted document can still be laying out images; give it a moment.
         try await Task.sleep(for: .milliseconds(300))
         let script = """

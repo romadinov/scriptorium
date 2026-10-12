@@ -33,6 +33,7 @@ func probeRealAZW3() throws {
     print("PROBE titles: \(book.chapterTitles.prefix(10).joined(separator: " | "))")
     print("PROBE outline: \(book.outline.count) top-level, first: \(book.outline.prefix(5).map(\.title))")
     let all = (0..<book.pageCount).map { (try? String(contentsOf: book.chapterURL(at: $0), encoding: .utf8)) ?? "" }.joined()
+    print("PROBE broken-up-paths=\(all.components(separatedBy: "\"../img/").count - 1)")
     print("PROBE kindle-left=\(all.components(separatedBy: "kindle:").count - 1) imgs=\(all.components(separatedBy: "<img").count - 1) links=\(all.components(separatedBy: "href=\"part").count - 1)")
     print("PROBE text: \(book.embeddedText(at: min(3, book.pageCount - 1))?.plainText.prefix(200) ?? "")")
 }

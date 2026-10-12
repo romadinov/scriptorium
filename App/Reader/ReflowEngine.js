@@ -349,6 +349,11 @@
     selTimer = setTimeout(() => post({ type: 'selection', text: String(window.getSelection()) }), 250);
   });
 
+  document.addEventListener('contextmenu', (e) => {
+    const link = e.target.closest && e.target.closest('a[href]');
+    post({ type: 'contextLink', href: link ? link.href : null });
+  }, true);
+
   document.addEventListener('click', (e) => {
     const mark = e.target.closest && e.target.closest('mark.rhl');
     const link = e.target.closest && e.target.closest('a[href]');

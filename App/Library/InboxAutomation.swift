@@ -1,4 +1,6 @@
+#if os(iOS)
 import BackgroundTasks
+#endif
 import Foundation
 import os
 import ReaderCore
@@ -113,6 +115,7 @@ final class InboxWatcher {
     }
 }
 
+#if os(iOS)
 /// Background import via BGTaskScheduler. iPadOS decides when these run (typically while idle/charging);
 /// each run imports whatever is in the Inbox and remembers the result for the next time the app opens.
 enum InboxBackgroundImport {
@@ -162,3 +165,4 @@ enum InboxBackgroundImport {
         return imported
     }
 }
+#endif

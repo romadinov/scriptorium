@@ -81,7 +81,7 @@ public final class AZW3Source: ReflowableSource, @unchecked Sendable {
             var children: [Entry]
         }
 
-        static let currentVersion = 1
+        static let currentVersion = 2
         var version = currentVersion
         var title: String?
         var chapterFiles: [String]
@@ -331,8 +331,11 @@ struct KF8Converter {
         var inlineFlows: [Int: String] = [:]
         for j in flows.indices.dropFirst() {
             var flow = decode(Data(flows[j]))
+            // CSS files live in css/, so their image paths go up a level; SVG and inline styles end up
+            // inside the part (at the top level), so theirs don't.
+            let inline = flow.range(of: "<svg", options: .caseInsensitive) != nil || flow.contains("[CDATA[")
             flow = Self.replace(#"kindle:embed:([0-9A-V]+)(\?mime=[^)'"]*)?"#, in: flow) { m in
-                resource(m[1]).map { "../" + $0 } ?? ""
+                resource(m[1]).map { (inline ? "" : "../") + $0 } ?? ""
             }
             flow = Self.replace(#"kindle:flow:([0-9A-V]+)\?mime=text/css[^)'"]*"#, in: flow) { m in
                 Int(m[1], radix: 32).map { String(format: "%04d.css", $0) } ?? ""
