@@ -141,6 +141,9 @@ final class ReaderModel {
     // Highlights
     var highlights: [Highlight] = []
     var tappedHighlight: Highlight?
+    /// A newer position saved on another device, offered to the reader ("Continue on p. 120 from Mac?").
+    var remotePosition: SyncedPosition?
+    @ObservationIgnored private var positionSave: Task<Void, Never>?
     /// The highlight or page whose note is being edited.
     var annotating: AnnotationTarget?
     private(set) var highlightLocationDescription = ""
@@ -247,6 +250,48 @@ final class ReaderModel {
         }
         return RunningHeaders.blanked(raw, neighbours: neighbours)
             .replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
+    }
+
+    // MARK: Synced position
+
+    /// Looks for a newer position from another device (on open, and when the app comes back).
+    func checkRemotePosition(localSavedAt: Date?) async {
+        guard let documentID else { return }
+        let others = await PositionStore.shared.others(documentID: documentID, excluding: DeviceIdentity.id)
+        guard let newest = others.first,
+              newest.shouldOffer(over: currentPage, reflowable == nil ? 0 : pageProgress, savedAt: localSavedAt) else { return }
+        remotePosition = newest
+    }
+
+    func acceptRemotePosition() {
+        guard let target = remotePosition else { return }
+        remotePosition = nil
+        pushCurrentPosition()
+        if reflowable != nil, let jumpToPosition {
+            jumpToPosition(target.page, target.progress)
+        } else {
+            jumpToPage?(target.page)
+            currentPage = target.page
+        }
+    }
+
+    /// "Stay": keep reading here, and tell the other devices this is now the latest place.
+    func declineRemotePosition() {
+        remotePosition = nil
+        publishPosition(after: .zero)
+    }
+
+    /// Shares where this device is, a few seconds after the reader stops moving (not on every page turn).
+    func publishPosition(after delay: Duration = .seconds(4)) {
+        guard let documentID else { return }
+        positionSave?.cancel()
+        positionSave = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            let position = SyncedPosition(page: currentPage, progress: reflowable == nil ? 0 : pageProgress,
+                                          label: currentPosition.label, device: DeviceIdentity.name, deviceID: DeviceIdentity.id)
+            await PositionStore.shared.save(position, documentID: documentID)
+        }
     }
 
     // MARK: Read Later

@@ -224,7 +224,7 @@ final class LibraryStore {
         try? FileManager.default.removeItem(at: url)
         let prefix = relativePath(url)
         for key in UserDefaults.standard.dictionaryRepresentation().keys
-        where key.hasPrefix("page:\(prefix)") || key.hasPrefix("progress:\(prefix)") {
+        where ["page:", "progress:", "positionDate:"].contains(where: { key.hasPrefix($0 + prefix) }) {
             UserDefaults.standard.removeObject(forKey: key)
         }
         reload()
@@ -304,6 +304,12 @@ final class LibraryStore {
 
     func setLastPage(_ page: Int, for book: Book) {
         UserDefaults.standard.set(page, forKey: "page:\(relativePath(book.url))")
+        UserDefaults.standard.set(Date(), forKey: "positionDate:\(relativePath(book.url))")
+    }
+
+    /// When this device last moved in the book (to compare with positions synced from other devices).
+    func lastPositionDate(_ book: Book) -> Date? {
+        UserDefaults.standard.object(forKey: "positionDate:\(relativePath(book.url))") as? Date
     }
 
     /// Position inside the page/chapter (0…1), for reflowable books.
@@ -313,6 +319,7 @@ final class LibraryStore {
 
     func setLastProgress(_ progress: Double, for book: Book) {
         UserDefaults.standard.set(progress, forKey: "progress:\(relativePath(book.url))")
+        UserDefaults.standard.set(Date(), forKey: "positionDate:\(relativePath(book.url))")
     }
 
     // MARK: Helpers
@@ -331,7 +338,7 @@ final class LibraryStore {
         let oldPath = relativePath(old), newPath = relativePath(new)
         let defaults = UserDefaults.standard
         for (key, value) in defaults.dictionaryRepresentation() {
-            for kind in ["page:", "progress:"] {
+            for kind in ["page:", "progress:", "positionDate:"] {
                 guard key == kind + oldPath || key.hasPrefix(kind + oldPath + "/") else { continue }
                 defaults.set(value, forKey: kind + newPath + key.dropFirst((kind + oldPath).count))
                 defaults.removeObject(forKey: key)

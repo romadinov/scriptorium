@@ -617,6 +617,23 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Highlight"].waitForExistence(timeout: 5), "Long press did not select text")
     }
 
+    /// scripts/seed-simulator.sh leaves a newer position from "Test Mac" (p. 3) for the Thermodynamics PDF.
+    func testOffersPositionFromAnotherDevice() throws {
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        let offer = app.staticTexts["Continue on p. 3?"]
+        XCTAssertTrue(offer.waitForExistence(timeout: 10), "No offer to continue from the other device")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'From Test Mac'")).firstMatch.exists)
+        snap("position-1-offer")
+        app.buttons["Go"].tap()
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+        let moved = NSPredicate { _, _ in indicator.label == "Page 3 of 3" }
+        wait(for: [expectation(for: moved, evaluatedWith: nil)], timeout: 5)
+        XCTAssertFalse(offer.exists, "Offer stayed after Go")
+        snap("position-2-moved")
+    }
+
     func testKindleAZW3() throws {
         openFolder("Fiction")
         open(bookMatching: "Pride and Prejudice (Kindle), AZW3")

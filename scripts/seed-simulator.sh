@@ -20,6 +20,18 @@ if [ -f "$SRC/Heat and Order.doc" ]; then
   [ -f "$SRC/Hyphens.doc" ] && cp "$SRC/Hyphens.doc" "$LIB/Word/"
 fi
 [ -f "$SRC/azw/Pride.azw3" ] && cp "$SRC/azw/Pride.azw3" "$LIB/Fiction/Pride and Prejudice (Kindle).azw3"
+# A reading position "from another device" (page 3 of the Thermodynamics PDF, saved in the future so it
+# counts as newer). Positions/<fingerprint>/<device>.json; fingerprint as DocumentFingerprint.id.
+python3 - "$LIB/Physics/Thermodynamics.pdf" "$DATA/Documents/Positions" <<'PY'
+import hashlib, json, os, sys
+path, root = sys.argv[1], sys.argv[2]
+data = open(path, 'rb').read()
+h = hashlib.sha256(str(len(data)).encode()); h.update(data[:256 * 1024])
+if len(data) > 512 * 1024: h.update(data[-256 * 1024:])
+folder = os.path.join(root, h.digest()[:10].hex()); os.makedirs(folder, exist_ok=True)
+json.dump({"page": 2, "progress": 0, "label": "p. 3", "updated": "2030-01-01T00:00:00Z",
+           "device": "Test Mac", "deviceID": "test-mac"}, open(os.path.join(folder, "test-mac.json"), "w"))
+PY
 # Without an iCloud account the app uses Documents/Inbox; leave two books there for the sync test.
 INBOX="$DATA/Documents/Inbox"
 rm -rf "$INBOX"; mkdir -p "$INBOX/Physics" "$INBOX/From Inbox"

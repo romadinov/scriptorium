@@ -6,6 +6,7 @@ struct ReaderScreen: View {
     let book: Book
     @Environment(LibraryStore.self) private var library
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: ReaderModel?
     @State private var openError: String?
 
@@ -38,10 +39,20 @@ struct ReaderScreen: View {
             model.reveal(highlight)
         }
         .onChange(of: model?.currentPage) { _, page in
-            if let page { library.setLastPage(page, for: book) }
+            if let page { library.setLastPage(page, for: book); model?.publishPosition() }
         }
         .onChange(of: model?.pageProgress) { _, progress in
-            if let progress { library.setLastProgress(progress, for: book) }
+            if let progress { library.setLastProgress(progress, for: book); model?.publishPosition() }
+        }
+        .task(id: model == nil) {
+            // Another device may have read on: offer its position once the viewer is up.
+            guard let model else { return }
+            try? await Task.sleep(for: .seconds(1))
+            await model.checkRemotePosition(localSavedAt: library.lastPositionDate(book))
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, let model else { return }
+            Task { await model.checkRemotePosition(localSavedAt: library.lastPositionDate(book)) }
         }
         .onChange(of: settings.ocrLanguages) { _, languages in
             guard let text = model?.text else { return }
@@ -111,6 +122,11 @@ private struct ReaderContent: View {
                              onBack: { model.goBack() }, onDismiss: { model.clearBackStack() })
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                if let remote = model.remotePosition {
+                    RemotePositionPill(position: remote, current: model.currentPosition.label,
+                                       onGo: { model.acceptRemotePosition() }, onStay: { model.declineRemotePosition() })
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 if let mark = model.currentBookmark, mark.hasAnnotation {
                     PageNotePill(bookmark: mark) { model.annotating = .bookmark(mark) }
                         .padding(.horizontal, 60)   // long notes truncate instead of spanning the page
@@ -121,6 +137,7 @@ private struct ReaderContent: View {
             .padding(.top, 12)
         }
         .animation(.snappy, value: model.backStack.count)
+        .animation(.snappy, value: model.remotePosition)
         .onChange(of: model.readingPageNumber) { model.noteReadingPosition() }
         .onDisappear { model.readAloud.stop() }
         .navigationTitle(model.book.title)
@@ -854,5 +871,30 @@ private struct PageNotePill: View {
         .glassEffect(in: .capsule)
         .accessibilityLabel("Page note")
         .accessibilityIdentifier("pageNote.pill")
+    }
+}
+
+/// "Continue on p. 120 — from Mac, 2 hours ago": another device read further (or elsewhere) in this book.
+struct RemotePositionPill: View {
+    let position: SyncedPosition
+    let current: String
+    let onGo: () -> Void
+    let onStay: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Continue on \(position.label)?").font(.callout.weight(.medium))
+                Text("From \(position.device), \(position.updated.formatted(.relative(presentation: .named)))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Button("Go", action: onGo).buttonStyle(.borderedProminent).controlSize(.small)
+            Button("Stay on \(current)", action: onStay).buttonStyle(.bordered).controlSize(.small)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .glassEffect(in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("remotePosition")
     }
 }
