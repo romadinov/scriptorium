@@ -162,7 +162,7 @@ public struct ImprovementNotes: Sendable {
 
     /// Appends a note; returns the screenshot's file name if one was saved.
     @discardableResult
-    public func add(_ text: String, context: String, build: String, device: String,
+    public func add(_ text: String, context: String, file book: String? = nil, build: String, device: String,
                     screenshot: Data? = nil, date: Date = Date()) throws -> String? {
         var attachment: String?
         if let screenshot {
@@ -178,7 +178,9 @@ public struct ImprovementNotes: Sendable {
 
         let lines = text.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines)
         let first = lines.first ?? ""
-        var tags: [(String, String?)] = [("date", TaskPaper.date(date)), ("where", context), ("build", build), ("device", device)]
+        var tags: [(String, String?)] = [("date", TaskPaper.date(date)), ("where", context)]
+        if let book { tags.append(("file", book)) }
+        tags += [("build", build), ("device", device)]
         if let attachment { tags.append(("screenshot", "Improvement notes/\(attachment)")) }
         var entry = TaskPaper.item(first, tags: tags)
         let rest = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)

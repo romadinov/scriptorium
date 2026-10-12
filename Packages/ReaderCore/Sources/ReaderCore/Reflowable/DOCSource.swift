@@ -36,7 +36,7 @@ public final class DOCSource: ReflowableSource, @unchecked Sendable {
         let converted = Self.convertedURL(for: url)
         contentRoot = converted.deletingLastPathComponent()
         guard let html = try? String(contentsOf: converted, encoding: .utf8) else { throw DocumentError.needsConversion }
-        let parts = HTMLSplitter.chapters(of: html)
+        let parts = HTMLSplitter.chapters(of: Self.cleanControlCharacters(html))
         for (index, part) in parts.enumerated() {
             let file = contentRoot.appending(path: "ch\(index).html")
             try part.html.write(to: file, atomically: true, encoding: .utf8)   // cheap; never stale
@@ -44,6 +44,23 @@ public final class DOCSource: ReflowableSource, @unchecked Sendable {
             chapterTitles.append(part.title ?? (index == 0 ? "Beginning" : "Section \(index + 1)"))
             if let title = part.title { outline.append(OutlineItem(title: title, pageIndex: index, children: [])) }
         }
+    }
+
+    /// Word's binary format keeps some marks as control characters that WebKit passes through and fonts
+    /// draw as boxes: optional hyphen (U+001F) → soft hyphen, non-breaking hyphen (U+001E) → U+2011;
+    /// any other C0 control (field/page/column marks) except tab and line breaks is dropped.
+    static func cleanControlCharacters(_ html: String) -> String {
+        var out = String.UnicodeScalarView()
+        for scalar in html.unicodeScalars {
+            switch scalar.value {
+            case 0x1F: out.append("\u{00AD}")
+            case 0x1E: out.append("\u{2011}")
+            case 0x09, 0x0A, 0x0D: out.append(scalar)
+            case 0x00..<0x20, 0x7F: continue
+            default: out.append(scalar)
+            }
+        }
+        return String(out)
     }
 
     public var pageCount: Int { chapters.count }

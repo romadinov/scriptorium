@@ -87,6 +87,18 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>Kindle Book</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.amazon.azw3</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Word Document</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -242,6 +254,27 @@
 				<key>public.mime-type</key>
 				<array>
 					<string>application/x-fictionbook+xml</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Kindle Book (AZW3)</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.amazon.azw3</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>azw3</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.amazon.mobi8-ebook</string>
 				</array>
 			</dict>
 		</dict>

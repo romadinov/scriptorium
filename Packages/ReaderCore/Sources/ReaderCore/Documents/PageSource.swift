@@ -104,13 +104,14 @@ public enum DocumentError: LocalizedError {
 
 public enum DocumentOpener {
     public static func canOpen(_ url: URL) -> Bool {
-        ["pdf", "djvu", "djv", "epub", "webarchive", "chm"].contains(url.pathExtension.lowercased()) || FB2Source.canOpen(url) || DOCXSource.canOpen(url) || DOCSource.canOpen(url)
+        ["pdf", "djvu", "djv", "epub", "webarchive", "chm"].contains(url.pathExtension.lowercased()) || FB2Source.canOpen(url) || DOCXSource.canOpen(url) || DOCSource.canOpen(url) || AZW3Source.canOpen(url)
     }
 
     public static func open(_ url: URL) throws -> PageSource {
         if FB2Source.canOpen(url) { return try FB2Source(url: url) }
         if DOCXSource.canOpen(url) { return try DOCXSource(url: url) }
         if DOCSource.canOpen(url) { return try DOCSource(url: url) }
+        if AZW3Source.canOpen(url) { return try AZW3Source(url: url) }
         switch url.pathExtension.lowercased() {
         case "pdf": return try PDFPageSource(url: url)
         case "djvu", "djv": return try DjVuPageSource(url: url)

@@ -6,6 +6,8 @@ import UIKit
 /// with where it was written and (optionally) a screenshot of that moment.
 struct ImprovementNoteView: View {
     let context: String
+    /// Library-relative path of the open book, if any.
+    var file: String? = nil
     let screenshot: UIImage?
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
@@ -54,7 +56,7 @@ struct ImprovementNoteView: View {
     private func save() async {
         saving = true
         defer { saving = false }
-        let note = text, context = context
+        let note = text, context = context, file = file
         let png = attach ? screenshot?.pngData() : nil
         let info = Bundle.main.infoDictionary
         let build = "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
@@ -62,7 +64,7 @@ struct ImprovementNoteView: View {
         do {
             try await Task.detached(priority: .userInitiated) {
                 _ = try ImprovementNotes(file: InboxLocation.improvementNotesFile())
-                    .add(note, context: context, build: build, device: device, screenshot: png)
+                    .add(note, context: context, file: file, build: build, device: device, screenshot: png)
             }.value
             dismiss()
         } catch {
@@ -87,16 +89,17 @@ final class ImprovementNoteRequest {
     struct Pending: Identifiable {
         let id = UUID()
         let context: String
+        let file: String?
         let screenshot: UIImage?
     }
 
     var pending: Pending?
 
-    func start(context: String) {
+    func start(context: String, file: String? = nil) {
         // Let the menu that triggered this close first, so the screenshot shows the page, not the menu.
         Task {
             try? await Task.sleep(for: .milliseconds(450))
-            pending = Pending(context: context, screenshot: Screenshot.capture())
+            pending = Pending(context: context, file: file, screenshot: Screenshot.capture())
         }
     }
 }

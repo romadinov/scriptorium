@@ -150,3 +150,8 @@ private func makeDOCX() throws -> URL {
     #expect(book.chapterTitles == ["Heat and Order", "Second chapter"])
     #expect(book.outline.first?.children.map(\.title) == ["Boltzmann"])
 }
+
+@Test func wordControlCharactersBecomeRealHyphensOrDisappear() {
+    let html = "<p>ру\u{1F}ководитель, по\u{1E}моему\u{13}\u{14}\u{15}, page\u{0C}\tend\n</p>"
+    #expect(DOCSource.cleanControlCharacters(html) == "<p>ру\u{AD}ководитель, по\u{2011}моему, page\tend\n</p>")
+}

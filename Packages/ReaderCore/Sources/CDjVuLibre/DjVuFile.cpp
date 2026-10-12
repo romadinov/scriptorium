@@ -1059,11 +1059,22 @@ DjVuFile::decode_chunk( const GUTF8String &id, const GP<ByteStream> &gbs,
   {
     if (fgpm || fgbc)
       G_THROW( ERR_MSG("DjVuFile.dupl_foregrnd") );
+    // Scriptorium: some scans carry a truncated FGbz (palette header followed by cut-off BZZ colour
+    // indices). The palette only colours the JB2 mask, so drop it and draw the text in black rather than
+    // failing the whole page (stock DjVuLibre renders such pages blank: "Unexpected End Of File").
     GP<DjVuPalette> fgbc = DjVuPalette::create();
-    fgbc->decode(gbs);
-    this->fgbc = fgbc;
-    desc.format( ERR_MSG("DjVuFile.JB2_fg") "\t%d\t%d",
-      fgbc->size(), fgbc->colordata.size());
+    G_TRY
+    {
+      fgbc->decode(gbs);
+      this->fgbc = fgbc;
+      desc.format( ERR_MSG("DjVuFile.JB2_fg") "\t%d\t%d",
+        fgbc->size(), fgbc->colordata.size());
+    }
+    G_CATCH_ALL
+    {
+      this->fgbc = 0;
+    }
+    G_ENDCATCH;
   }
   
   // BM44/PM44 (IW44 data)

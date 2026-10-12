@@ -574,6 +574,31 @@ final class ReaderFlowTests: XCTestCase {
             app.navigationBars.buttons.element(boundBy: 0).tap()
             sleep(1)
         }
+
+        // Word's optional/non-breaking hyphens are control characters; they must not show up as boxes.
+        open(bookMatching: "Hyphens, DOC")
+        let words = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Optional'")).firstMatch
+        XCTAssertTrue(words.waitForExistence(timeout: 20), "Hyphen test document did not open")
+        sleep(1)
+        snap("word-hyphens")
+        XCTAssertNil(words.label.unicodeScalars.first { $0.value < 0x20 && $0.value != 0x0A && $0.value != 0x09 },
+                     "Control characters left in the text: \(words.label.debugDescription)")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+    }
+
+    func testKindleAZW3() throws {
+        openFolder("Fiction")
+        open(bookMatching: "Pride and Prejudice (Kindle), AZW3")
+        XCTAssertTrue(app.buttons["Contents"].waitForExistence(timeout: 30), "AZW3 did not open")
+        app.buttons["Contents"].tap()
+        let chapter = app.buttons.matching(NSPredicate(format: "label CONTAINS 'CHAPTER IV'")).firstMatch
+        XCTAssertTrue(chapter.waitForExistence(timeout: 5), "No contents")
+        snap("azw3-1-contents")
+        chapter.tap()
+        let text = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Jane'")).firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 15), "Chapter text not shown")
+        sleep(1)
+        snap("azw3-2-chapter")
     }
 
     func testFileOperationsSwipeMoveSelectDelete() throws {

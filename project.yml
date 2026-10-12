@@ -31,7 +31,7 @@ targets:
         MARKETING_VERSION: "1.0"
         # Raise for every install (scripts/bump-build.sh): iCloud only re-reads NSUbiquitousContainers
         # (the "Scriptorium" folder in iCloud Drive) when the build number changes.
-        CURRENT_PROJECT_VERSION: "12"
+        CURRENT_PROJECT_VERSION: "13"
         CODE_SIGN_ENTITLEMENTS: App/Scriptorium.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -84,6 +84,10 @@ targets:
             CFBundleTypeRole: Viewer
             LSHandlerRank: Owner
             LSItemContentTypes: [org.gribuser.fb2]
+          - CFBundleTypeName: Kindle Book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.amazon.azw3]
           - CFBundleTypeName: Word Document
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
@@ -124,6 +128,12 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension: [fb2]
               public.mime-type: [application/x-fictionbook+xml]
+          - UTTypeIdentifier: com.amazon.azw3
+            UTTypeDescription: Kindle Book (AZW3)
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [azw3]
+              public.mime-type: [application/vnd.amazon.mobi8-ebook]
 
   ReaderUITests:
     type: bundle.ui-testing

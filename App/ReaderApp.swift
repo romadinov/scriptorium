@@ -26,7 +26,7 @@ struct ReaderApp: App {
                 .environment(settings)
                 .environment(noteRequest)
                 .sheet(item: $noteRequest.pending) { pending in
-                    ImprovementNoteView(context: pending.context, screenshot: pending.screenshot)
+                    ImprovementNoteView(context: pending.context, file: pending.file, screenshot: pending.screenshot)
                 }
                 .onOpenURL { url in
                     if let link = DeepLink(url: url) {

@@ -280,7 +280,7 @@ private struct ReaderContent: View {
                 }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
-                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
+                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
             }
         }
     }
@@ -305,6 +305,13 @@ private struct ReaderContent: View {
         } else {
             Task { await model.toggleBookmark() }
         }
+    }
+
+    /// The open book's path in the library ("Physics/Thermodynamics.djvu"), so a note names the exact file.
+    private var noteFile: String {
+        let path = model.book.url.standardizedFileURL.path
+        let root = LibraryStore.rootURL.standardizedFileURL.path
+        return path.hasPrefix(root + "/") ? String(path.dropFirst(root.count + 1)) : model.book.url.lastPathComponent
     }
 
     /// Where an improvement note was written: book, format, page and view mode.
@@ -341,7 +348,7 @@ private struct ReaderContent: View {
                 }
                 Button("Page Note", systemImage: pageNoteIcon) { Task { await model.annotatePage() } }
                 Button("Highlights & Notes", systemImage: "highlighter") { showHighlights = true }
-                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
+                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
                         Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1, remember: false) }

@@ -17,7 +17,9 @@ if [ -f "$SRC/Heat and Order.doc" ]; then
   mkdir -p "$LIB/Word"
   cp "$SRC/Heat and Order.doc" "$LIB/Word/"
   [ -f "$SRC/Heat and Order (Word).docx" ] && cp "$SRC/Heat and Order (Word).docx" "$LIB/Word/"
+  [ -f "$SRC/Hyphens.doc" ] && cp "$SRC/Hyphens.doc" "$LIB/Word/"
 fi
+[ -f "$SRC/azw/Pride.azw3" ] && cp "$SRC/azw/Pride.azw3" "$LIB/Fiction/Pride and Prejudice (Kindle).azw3"
 # Without an iCloud account the app uses Documents/Inbox; leave two books there for the sync test.
 INBOX="$DATA/Documents/Inbox"
 rm -rf "$INBOX"; mkdir -p "$INBOX/Physics" "$INBOX/From Inbox"
