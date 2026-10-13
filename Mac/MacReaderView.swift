@@ -238,6 +238,8 @@ struct MacReaderContent: View {
                 if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
             }
             .help("Read aloud from here (⌥⌘R); click a word while reading to continue from it")
+            SendToMenu(book: model.book.url)
+                .help("Send this book to your iPad, iPhone or another Mac")
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
                 .help("Ask about the page or the selection (⌥⌘A)")
         }

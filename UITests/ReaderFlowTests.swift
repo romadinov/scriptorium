@@ -661,6 +661,16 @@ final class ReaderFlowTests: XCTestCase {
         let sent = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test Mac'")).firstMatch
         XCTAssertTrue(sent.waitForExistence(timeout: 10), "No confirmation")
         snap("transfer-3-sent")
+
+        // From inside the book, too: the reader's toolbar has Send to.
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["Send to"].waitForExistence(timeout: 10), "No Send to in the reader")
+        app.buttons["Send to"].tap()
+        XCTAssertTrue(app.buttons["Test Mac"].waitForExistence(timeout: 5))
+        snap("transfer-4-reader-menu")
+        app.buttons["Test Mac"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test Mac'")).firstMatch
+            .waitForExistence(timeout: 10), "No confirmation in the reader")
     }
 
     func testKindleAZW3() throws {

@@ -266,9 +266,9 @@ private struct ReaderContent: View {
             }
             Button("Highlights", systemImage: "highlighter") { showHighlights = true }
                 .popover(isPresented: $showHighlights) { bookIndex(.highlights).frame(minWidth: 360, minHeight: 460) }
+            SendToMenu(book: model.book.url)          // send this book to another device, while reading
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
-                SendToMenu(book: model.book.url)
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
             }
         }
