@@ -254,6 +254,53 @@ final class ReaderModel {
             .replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
     }
 
+    // MARK: Reading pace
+
+    /// This book's pace (pages are denser in some books than others); the overall pace stands in until it's known.
+    private(set) var pace = ReadingPace()
+    @ObservationIgnored private var overallPace = ReadingPace()
+    @ObservationIgnored private var lastTurn: (page: Int, at: Date)?
+    @ObservationIgnored private var paceKey: String { "pace:" + (documentID ?? book.url.lastPathComponent) }
+
+    private func loadPace() {
+        let decoder = JSONDecoder()
+        pace = UserDefaults.standard.data(forKey: paceKey).flatMap { try? decoder.decode(ReadingPace.self, from: $0) } ?? ReadingPace()
+        overallPace = UserDefaults.standard.data(forKey: "pace:all").flatMap { try? decoder.decode(ReadingPace.self, from: $0) } ?? ReadingPace()
+    }
+
+    /// Times each step forward by one page; skimming, pauses and jumps don't count.
+    func notePageTurn() {
+        let page = readingPageNumber, now = Date()
+        defer { lastTurn = (page, now) }
+        guard let last = lastTurn, page == last.page + 1 else { return }
+        let seconds = now.timeIntervalSince(last.at)
+        guard pace.record(seconds) else { return }
+        overallPace.record(seconds)
+        let encoder = JSONEncoder()
+        UserDefaults.standard.set(try? encoder.encode(pace), forKey: paceKey)
+        UserDefaults.standard.set(try? encoder.encode(overallPace), forKey: "pace:all")
+    }
+
+    /// The app went to the background: time away isn't reading time.
+    func pausePace() { lastTurn = nil }
+
+    /// Time to finish the book at your pace (nil until a few pages have been timed).
+    var timeLeft: TimeInterval? {
+        // On unless switched off (launch arguments arrive as strings, so read it with bool(forKey:)).
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "showTimeLeft") == nil || defaults.bool(forKey: "showTimeLeft") else { return nil }
+        let total = reflowable == nil ? source.pageCount : totalPages
+        return pace.timeLeft(pages: total - readingPageNumber, fallback: overallPace)
+    }
+
+    var timeLeftText: String? { timeLeft.map { ReadingPace.describe($0) + " left" } }
+
+    /// "1.2 min a page" (or seconds), for the page picker.
+    var paceText: String? {
+        guard let seconds = pace.secondsPerPage ?? overallPace.secondsPerPage else { return nil }
+        return seconds < 90 ? "\(Int(seconds.rounded())) s a page" : String(format: "%.1f min a page", seconds / 60)
+    }
+
     // MARK: Synced position
 
     /// Looks for a newer position from another device (on open, and when the app comes back).
@@ -378,6 +425,7 @@ final class ReaderModel {
         highlights = highlightBook?.highlights ?? []
         bookmarks = highlightBook?.bookmarks ?? []
         highlightLocationDescription = await highlightStore.textFolderDescription
+        loadPace()
     }
 
     /// Highlights the current selection in `color`.

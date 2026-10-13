@@ -51,6 +51,7 @@ struct ReaderScreen: View {
             await model.checkRemotePosition(localSavedAt: library.lastPositionDate(book))
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase != .active { model?.pausePace() }
             guard phase == .active, let model else { return }
             Task { await model.checkRemotePosition(localSavedAt: library.lastPositionDate(book)) }
         }
@@ -139,7 +140,10 @@ private struct ReaderContent: View {
         }
         .animation(.snappy, value: model.backStack.count)
         .animation(.snappy, value: model.remotePosition)
-        .onChange(of: model.readingPageNumber) { model.noteReadingPosition() }
+        .onChange(of: model.readingPageNumber) {
+            model.noteReadingPosition()
+            model.notePageTurn()
+        }
         .onChange(of: transfers.status) { _, status in if let status { model.statusMessage = status } }
         .onDisappear { model.readAloud.stop() }
         .navigationTitle(model.book.title)
@@ -395,14 +399,18 @@ private struct ReaderContent: View {
     }
 
     private var pageLabel: String {
-        guard model.reflowable != nil else { return "\(model.currentPage + 1) / \(model.source.pageCount)" }
-        return "\(model.globalPage) / \(model.pagesAreExact ? "" : "≈")\(model.totalPages)"
+        let pages = model.reflowable == nil ? "\(model.currentPage + 1) / \(model.source.pageCount)"
+            : "\(model.globalPage) / \(model.pagesAreExact ? "" : "≈")\(model.totalPages)"
+        // Time left at your pace, where there's room (not on iPhone).
+        guard !compact, let left = model.timeLeftText else { return pages }
+        return pages + " · " + left
     }
 
     /// Spoken (and used by UI tests): "Chapter 2 of 9, page 34 of 480".
     private var pageAccessibilityLabel: String {
-        guard model.reflowable != nil else { return "Page \(model.currentPage + 1) of \(model.source.pageCount)" }
-        return "Chapter \(model.currentPage + 1) of \(model.source.pageCount), page \(model.globalPage) of \(model.totalPages)"
+        let left = model.timeLeftText.map { ", \($0)" } ?? ""
+        guard model.reflowable != nil else { return "Page \(model.currentPage + 1) of \(model.source.pageCount)\(left)" }
+        return "Chapter \(model.currentPage + 1) of \(model.source.pageCount), page \(model.globalPage) of \(model.totalPages)\(left)"
     }
 }
 
@@ -770,6 +778,13 @@ private struct PagePicker: View {
             }
             if model.reflowable != nil && !model.pagesAreExact {
                 Text("Counting pages… numbers marked ≈ are estimates.").font(.caption).foregroundStyle(.secondary)
+            }
+            if let left = model.timeLeft {
+                Label("About \(ReadingPace.describe(left)) to finish, at your pace (\(model.paceText ?? ""))", systemImage: "clock")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Label("Time to finish appears after a few pages.", systemImage: "clock")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .onAppear { value = Double(model.reflowable == nil ? model.currentPage + 1 : model.globalPage) }

@@ -14,6 +14,8 @@ final class ReaderFlowTests: XCTestCase {
         app.launchArguments += ["-deviceID", "sim-ipad"]          // matches scripts/seed-simulator.sh transfers
         // Tests start in the library, not in the book a previous test left open.
         if !name.contains("Reopens") { app.launchArguments += ["-lastOpenBook", ""] }
+        // Page labels are matched exactly; the time-left estimate is only shown in its own test.
+        if !name.contains("TimeLeft") { app.launchArguments += ["-showTimeLeft", "NO"] }
         app.launch()
     }
 
@@ -714,6 +716,25 @@ final class ReaderFlowTests: XCTestCase {
         app.terminate()
         app.launch()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10), "Should start in the library after closing the book")
+    }
+
+    func testShowsTimeLeftAfterAFewPages() throws {
+        openFolder("Fiction")
+        open(bookMatching: "Pride and Prejudice, EPUB")
+        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chapter '")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 20))
+        sleep(3)
+        for _ in 0..<7 {                 // read a few pages at ~4 s a page
+            app.webViews.firstMatch.swipeLeft()
+            sleep(4)
+        }
+        let label = app.buttons.matching(NSPredicate(format: "label CONTAINS ' left'")).firstMatch
+        XCTAssertTrue(label.waitForExistence(timeout: 5), "No time-left estimate in the toolbar")
+        snap("pace-1-toolbar")
+        indicator.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'About ' AND label CONTAINS 'a page'")).firstMatch
+            .waitForExistence(timeout: 5), "No pace in the page picker")
+        snap("pace-2-picker")
     }
 
     func testKindleAZW3() throws {

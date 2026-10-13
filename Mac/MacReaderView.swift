@@ -22,7 +22,9 @@ struct MacReaderView: View {
             }
         }
         .navigationTitle(book.title)
-        .navigationSubtitle(model.map { "\($0.currentPosition.label) · \(book.format)" } ?? book.format)
+        .navigationSubtitle(model.map { m in
+            ["\(m.currentPosition.label)", book.format, m.timeLeftText].compactMap { $0 }.joined(separator: " · ")
+        } ?? book.format)
         .task(id: book.url) {
             do {
                 model = try await ReaderModel.load(book: book, startPage: library.lastPage(book),
@@ -49,6 +51,7 @@ struct MacReaderView: View {
             if let progress { library.setLastProgress(progress, for: book); model?.publishPosition() }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase != .active { model?.pausePace() }
             guard phase == .active, let model else { return }
             Task { await model.checkRemotePosition(localSavedAt: library.lastPositionDate(book)) }
         }
@@ -170,7 +173,10 @@ struct MacReaderContent: View {
             }
         }
         .padding(.top, 10)
-        .onChange(of: model.readingPageNumber) { model.noteReadingPosition() }
+        .onChange(of: model.readingPageNumber) {
+            model.noteReadingPosition()
+            model.notePageTurn()
+        }
     }
 
     // MARK: Toolbar
