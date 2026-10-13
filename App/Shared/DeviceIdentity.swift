@@ -14,6 +14,14 @@ enum DeviceIdentity {
         return new
     }()
 
+    @MainActor static var kind: DeviceInfo.Kind {
+        #if os(macOS)
+        .mac
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
+        #endif
+    }
+
     @MainActor static var name: String {
         #if os(macOS)
         Host.current().localizedName ?? "Mac"

@@ -7,6 +7,7 @@ struct MacLibraryView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(MacRouter.self) private var router
     @Environment(\.openWindow) private var openWindow
+    @Environment(DeviceTransfers.self) private var transfers
 
     @State private var folderURL: URL?
     @State private var selection = Set<URL>()
@@ -58,6 +59,24 @@ struct MacLibraryView: View {
                 importFiles(urls)
             }
             return true
+        }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 8) {
+                if !transfers.received.isEmpty {
+                    HStack {
+                        Label("Received \(transfers.received.count) book\(transfers.received.count == 1 ? "" : "s") from your other devices: "
+                              + transfers.received.prefix(3).map { ($0 as NSString).lastPathComponent }.joined(separator: ", "),
+                              systemImage: "paperplane")
+                        Button("Dismiss", systemImage: "xmark") { transfers.received = [] }.labelStyle(.iconOnly).buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 8).glassEffect(in: .capsule)
+                }
+                if let status = transfers.status {
+                    Text(status).padding(.horizontal, 14).padding(.vertical, 8).glassEffect(in: .capsule)
+                        .task(id: status) { if (try? await Task.sleep(for: .seconds(5))) != nil { transfers.status = nil } }
+                }
+            }
+            .padding(.bottom, 16)
         }
         .overlay {
             if dropTargeted {
@@ -200,6 +219,9 @@ struct MacLibraryView: View {
         .contextMenu(forSelectionType: URL.self) { urls in
             if !urls.isEmpty {
                 Button("Open") { urls.forEach { open(Book(url: $0)) } }
+                if urls.count == 1, let url = urls.first {
+                    SendToMenu(book: url)
+                }
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(Array(urls)) }
                 if urls.count == 1, let url = urls.first {
                     Button("Rename…") { renameText = url.deletingPathExtension().lastPathComponent; renaming = url }

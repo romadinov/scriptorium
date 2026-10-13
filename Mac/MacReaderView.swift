@@ -59,6 +59,7 @@ struct MacReaderView: View {
 struct MacReaderContent: View {
     @Bindable var model: ReaderModel
     @Environment(SettingsStore.self) private var settings
+    @Environment(DeviceTransfers.self) private var transfers
     @State private var showAssistant = false
     @State private var columns: NavigationSplitViewVisibility = .detailOnly
     @State private var indexTab: MacBookIndex.Tab = .contents
@@ -110,11 +111,12 @@ struct MacReaderContent: View {
             Text("“\(highlight.text.prefix(140))”")
         }
         .sheet(isPresented: $showGoTo) { MacGoToPage(model: model) }
+        .onChange(of: transfers.status) { _, status in if let status { model.statusMessage = status } }
         .overlay(alignment: .bottom) {
             if let message = model.statusMessage {
                 Text(message).font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
                     .glassEffect(in: .capsule).padding(.bottom, 60)
-                    .task(id: message) { try? await Task.sleep(for: .seconds(4)); model.statusMessage = nil }
+                    .task(id: message) { if (try? await Task.sleep(for: .seconds(4))) != nil { model.statusMessage = nil } }
             }
         }
     }

@@ -4,6 +4,11 @@ import UIKit
 
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var library
+    @Environment(DeviceTransfers.self) private var transfers
+
+    private var inReader: Bool {
+        if case .book? = library.path.last { true } else { false }
+    }
 
     var body: some View {
         @Bindable var library = library
@@ -22,12 +27,30 @@ struct LibraryView: View {
                     }
                 }
         }
+        // Books arriving from other devices and send confirmations, wherever you are in the library
+        // (the reader shows sends in its own status line).
+        .overlay(alignment: .bottom) {
+            if !inReader {
+                VStack(spacing: 8) {
+                    if !transfers.received.isEmpty {
+                        ImportBanner(paths: transfers.received, source: "another device") { transfers.received = [] }
+                    }
+                    if let status = transfers.status {
+                        Text(status).font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
+                            .glassEffect(in: .capsule)
+                            .task(id: status) { if (try? await Task.sleep(for: .seconds(5))) != nil { transfers.status = nil } }
+                    }
+                }
+                .padding()
+            }
+        }
     }
 }
 
 private struct FolderView: View {
     let folder: Folder
     @Environment(LibraryStore.self) private var library
+    @Environment(DeviceTransfers.self) private var transfers
     @State private var folders: [Folder] = []
     @State private var books: [Book] = []
     @State private var importing = false
@@ -280,6 +303,9 @@ private struct FolderView: View {
 
     @ViewBuilder
     private func itemMenu(_ url: URL, name: String) -> some View {
+        if !library.isDirectory(url) {
+            SendToMenu(book: url)
+        }
         Button("Rename", systemImage: "pencil") { naming = .rename(url, name) }
         Button("Move to…", systemImage: "folder") { moving = [url] }
         Divider()
@@ -585,13 +611,14 @@ private struct ReadLaterView: View {
 
 private struct ImportBanner: View {
     let paths: [String]
+    var source = "your iCloud Inbox"
     let onDismiss: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "icloud.and.arrow.down").font(.title3).foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Imported \(paths.count) book\(paths.count == 1 ? "" : "s") from your iCloud Inbox").font(.headline)
+                Text("Imported \(paths.count) book\(paths.count == 1 ? "" : "s") from \(source)").font(.headline)
                 Text(paths.prefix(3).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
                      + (paths.count > 3 ? " and \(paths.count - 3) more" : ""))
                     .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
@@ -602,7 +629,7 @@ private struct ImportBanner: View {
         .padding(14)
         .glassEffect(in: .rect(cornerRadius: 16))
         .task(id: paths.count) {
-            try? await Task.sleep(for: .seconds(8))
+            guard (try? await Task.sleep(for: .seconds(8))) != nil else { return }
             onDismiss()
         }
     }

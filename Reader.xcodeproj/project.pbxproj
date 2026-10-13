@@ -15,12 +15,16 @@
 		1B0876458C10A29DE5B12B7C /* AnnotationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100A2C855C83045D8F042066 /* AnnotationEditor.swift */; };
 		1BE3116CCFBC9527091D2D6A /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 854C56DF1747ADE0191C68E5 /* SettingsStore.swift */; };
 		1F91408DB5E5794529C54E20 /* MacReadLaterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1EB19160FD15C30982DF2AB /* MacReadLaterView.swift */; };
+		292B8784CC573534982A7A39 /* SendToMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C1D3BA7511FA6CA964C21 /* SendToMenu.swift */; };
 		293D6C5CF4AE3C52E40DD924 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 91665D257827EDB0F9C72846 /* Assets.xcassets */; };
 		343FF33F2432BAA0F37D140D /* ScriptoriumMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208364F007316AFDE53579F2 /* ScriptoriumMacApp.swift */; };
 		351579D63B17292D3610BEBE /* InboxAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD8F32EB58A2CD39C018AD3 /* InboxAutomation.swift */; };
 		368F01F5646425BFF1127BB2 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50DDEB6759BD6CF8EE219A29 /* Platform.swift */; };
+		38FE5386323D2AABA2E54F8C /* DeviceTransfers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA9A741B605945E576B9C57 /* DeviceTransfers.swift */; };
 		3A45199EF3F2536475D82A80 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4123ECE629C6D7E255BCAD7B /* LibraryStore.swift */; };
+		3A61E0C7AE64AF94A195D5D8 /* DeviceTransfers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA9A741B605945E576B9C57 /* DeviceTransfers.swift */; };
 		3DCCAB0173A5A13329CD96F2 /* ReflowEngine.js in Resources */ = {isa = PBXBuildFile; fileRef = D2B2A2361D253EFE3731B80B /* ReflowEngine.js */; };
+		488F271AF5C8DE69C2A0ED0C /* SendToMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C1D3BA7511FA6CA964C21 /* SendToMenu.swift */; };
 		48F6C9CF490DE02A28E9EFF2 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 854C56DF1747ADE0191C68E5 /* SettingsStore.swift */; };
 		4AB24BD22B4328865FCE3D8C /* ReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = AAE9E96EA8656F743D247BCB /* ReaderCore */; };
 		4CB6BD43E27066EC0E98DBF4 /* ReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0063B8777CB5A098250F91B /* ReaderApp.swift */; };
@@ -84,6 +88,7 @@
 		100A2C855C83045D8F042066 /* AnnotationEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationEditor.swift; sourceTree = "<group>"; };
 		1780E587DDBB8C98CC62E2D9 /* ReflowableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReflowableView.swift; sourceTree = "<group>"; };
 		19694900C855377ADEFF2535 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1DA9A741B605945E576B9C57 /* DeviceTransfers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTransfers.swift; sourceTree = "<group>"; };
 		208364F007316AFDE53579F2 /* ScriptoriumMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptoriumMacApp.swift; sourceTree = "<group>"; };
 		22A0DBAA47B40986A7FF944D /* MacImagePagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacImagePagesView.swift; sourceTree = "<group>"; };
 		28056BA93C8E3F4BFA461364 /* MacLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLibraryView.swift; sourceTree = "<group>"; };
@@ -91,6 +96,7 @@
 		3210708FD2C6DCA964EB0114 /* RemotePositionPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePositionPill.swift; sourceTree = "<group>"; };
 		33DD102B979B5A846542DBD4 /* MacAnnotationEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAnnotationEditor.swift; sourceTree = "<group>"; };
 		3C1A2CB5181B22060CA94D48 /* MacAllNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAllNotesView.swift; sourceTree = "<group>"; };
+		3D6C1D3BA7511FA6CA964C21 /* SendToMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendToMenu.swift; sourceTree = "<group>"; };
 		4123ECE629C6D7E255BCAD7B /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		4EB18013BEF232710B2EDD4C /* MacFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFlowTests.swift; sourceTree = "<group>"; };
 		50DDEB6759BD6CF8EE219A29 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
@@ -276,8 +282,10 @@
 			isa = PBXGroup;
 			children = (
 				5D9E681D721C220D47C24D60 /* DeviceIdentity.swift */,
+				1DA9A741B605945E576B9C57 /* DeviceTransfers.swift */,
 				50DDEB6759BD6CF8EE219A29 /* Platform.swift */,
 				3210708FD2C6DCA964EB0114 /* RemotePositionPill.swift */,
+				3D6C1D3BA7511FA6CA964C21 /* SendToMenu.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -443,6 +451,7 @@
 				1B0876458C10A29DE5B12B7C /* AnnotationEditor.swift in Sources */,
 				FDD5C79E1E0062CE5F4B3915 /* AssistantPanel.swift in Sources */,
 				CFD79D3FF739EE540F38072E /* DeviceIdentity.swift in Sources */,
+				3A61E0C7AE64AF94A195D5D8 /* DeviceTransfers.swift in Sources */,
 				504EACE05584958991444333 /* HorizontalPageView.swift in Sources */,
 				E7821B425F9698114A14BD57 /* ImprovementNoteView.swift in Sources */,
 				351579D63B17292D3610BEBE /* InboxAutomation.swift in Sources */,
@@ -458,6 +467,7 @@
 				B6239842E4B6C50E3BC038A6 /* ReaderScreen.swift in Sources */,
 				F724DA519FFC3D85D1BE9716 /* ReflowableView.swift in Sources */,
 				14B7F9A4705ABF8A9EA01714 /* RemotePositionPill.swift in Sources */,
+				488F271AF5C8DE69C2A0ED0C /* SendToMenu.swift in Sources */,
 				1BE3116CCFBC9527091D2D6A /* SettingsStore.swift in Sources */,
 				7B49954A65E4C37E796A43E8 /* SettingsView.swift in Sources */,
 				88093EAF0CCD5B0D5A196515 /* TransferView.swift in Sources */,
@@ -480,6 +490,7 @@
 				AE90E508896AB94665E6A0A3 /* AssistantPanel.swift in Sources */,
 				C5DFD97A6DC540BE65995EB2 /* DebugSnapshots.swift in Sources */,
 				8FB46EBBEE43A08A4F6299EC /* DeviceIdentity.swift in Sources */,
+				38FE5386323D2AABA2E54F8C /* DeviceTransfers.swift in Sources */,
 				8F3C6AA501A224099675F7F5 /* InboxAutomation.swift in Sources */,
 				00912EF5855301A5E469CE1B /* LibraryStore.swift in Sources */,
 				6A45B60150D81F83EACAF969 /* MacAllNotesView.swift in Sources */,
@@ -498,6 +509,7 @@
 				653D99CE596977ABFF9D85D7 /* ReflowableView.swift in Sources */,
 				CE93A67E2158D2F4BF5C872D /* RemotePositionPill.swift in Sources */,
 				343FF33F2432BAA0F37D140D /* ScriptoriumMacApp.swift in Sources */,
+				292B8784CC573534982A7A39 /* SendToMenu.swift in Sources */,
 				48F6C9CF490DE02A28E9EFF2 /* SettingsStore.swift in Sources */,
 				F5EF2850283F094B8E31DF1D /* WordDocConverter.swift in Sources */,
 			);
@@ -534,7 +546,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Mac/$(MAC_ENTITLEMENTS).entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Mac/Info.plist;
@@ -558,7 +570,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Mac/$(MAC_ENTITLEMENTS).entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Mac/Info.plist;
@@ -739,7 +751,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;
@@ -761,7 +773,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;

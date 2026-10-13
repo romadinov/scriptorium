@@ -23,6 +23,8 @@ struct ReaderApp: App {
         WindowGroup {
             LibraryView()
                 .environment(library)
+                .environment(DeviceTransfers.shared)
+                .onAppear { DeviceTransfers.shared.onImported = { [library] in library.reload() } }
                 .environment(settings)
                 .environment(noteRequest)
                 .sheet(item: $noteRequest.pending) { pending in
@@ -37,9 +39,12 @@ struct ReaderApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
-                    case .active: library.startWatchingInbox()
+                    case .active:
+                        library.startWatchingInbox()
+                        Task { await DeviceTransfers.shared.start() }
                     case .background:
                         library.stopWatchingInbox()
+                        DeviceTransfers.shared.stop()
                         InboxBackgroundImport.schedule()
                     default: break
                     }

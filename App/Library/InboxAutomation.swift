@@ -49,11 +49,12 @@ final class InboxWatcher {
         self.onReady = onReady
     }
 
-    func start(inbox: URL, isCloud: Bool) {
+    /// `scope`: the Inbox is in the container's Documents; device transfers are in its hidden data area.
+    func start(inbox: URL, isCloud: Bool, scope: String = NSMetadataQueryUbiquitousDocumentsScope) {
         stop()
         if isCloud {
             let query = NSMetadataQuery()
-            query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
+            query.searchScopes = [scope]
             query.predicate = NSPredicate(format: "%K BEGINSWITH %@", NSMetadataItemPathKey, inbox.standardizedFileURL.path)
             query.notificationBatchingInterval = 1
             for name in [Notification.Name.NSMetadataQueryDidFinishGathering, .NSMetadataQueryDidUpdate] {
@@ -148,9 +149,10 @@ enum InboxBackgroundImport {
         let work = Task.detached(priority: .utility) {
             let (inbox, _) = InboxLocation.resolve()
             let report = await InboxSync(library: LibraryStore.rootURL, inbox: inbox).sync()
-            if !report.imported.isEmpty {
+            let sent = await DeviceTransfers.importInBackground()      // books other devices sent here
+            if !report.imported.isEmpty || !sent.isEmpty {
                 let previous = UserDefaults.standard.stringArray(forKey: pendingReportKey) ?? []
-                UserDefaults.standard.set(previous + report.imported, forKey: pendingReportKey)
+                UserDefaults.standard.set(previous + report.imported + sent, forKey: pendingReportKey)
             }
             log.info("Background inbox import: \(report.summary, privacy: .public)")
             task.setTaskCompleted(success: report.failed.isEmpty)

@@ -64,6 +64,7 @@ struct ReaderScreen: View {
 private struct ReaderContent: View {
     @Bindable var model: ReaderModel
     @Environment(SettingsStore.self) private var settings
+    @Environment(DeviceTransfers.self) private var transfers
     @State private var showAssistant = false
     @State private var showOutline = false
     @State private var showPagePicker = false
@@ -139,6 +140,7 @@ private struct ReaderContent: View {
         .animation(.snappy, value: model.backStack.count)
         .animation(.snappy, value: model.remotePosition)
         .onChange(of: model.readingPageNumber) { model.noteReadingPosition() }
+        .onChange(of: transfers.status) { _, status in if let status { model.statusMessage = status } }
         .onDisappear { model.readAloud.stop() }
         .navigationTitle(model.book.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -266,6 +268,7 @@ private struct ReaderContent: View {
                 .popover(isPresented: $showHighlights) { bookIndex(.highlights).frame(minWidth: 360, minHeight: 460) }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
+                SendToMenu(book: model.book.url)
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
             }
         }
@@ -350,6 +353,7 @@ private struct ReaderContent: View {
                 }
                 Button("Page Note", systemImage: pageNoteIcon) { Task { await model.annotatePage() } }
                 Button("Highlights & Notes", systemImage: "highlighter") { showHighlights = true }
+                SendToMenu(book: model.book.url)
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
@@ -713,7 +717,8 @@ private struct StatusPill: View {
         .padding(.horizontal, 14).padding(.vertical, 8)
         .glassEffect(in: .capsule)
         .task(id: text) {
-            try? await Task.sleep(for: .seconds(4))
+            // A new message cancels this wait — then it must not close the new one.
+            guard (try? await Task.sleep(for: .seconds(4))) != nil else { return }
             onClose()
         }
     }

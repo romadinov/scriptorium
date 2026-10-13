@@ -33,6 +33,13 @@ folder = os.path.join(root, h.digest()[:10].hex()); os.makedirs(folder, exist_ok
 json.dump({"page": 2, "progress": 0, "label": "p. 3", "updated": "2030-01-01T00:00:00Z",
            "device": "Test Mac", "deviceID": "test-mac"}, open(os.path.join(folder, "test-mac.json"), "w"))
 PY
+# Device transfers (local fallback Documents/Devices without iCloud): this simulator is "sim-ipad", a
+# "Test Mac" is registered, and a book "sent from the iPhone" waits in sim-ipad's transfer folder.
+# (UI tests launch with -deviceID sim-ipad.)
+DEV="$DATA/Documents/Devices"
+rm -rf "$DEV"; mkdir -p "$DEV/Devices" "$DEV/Transfers/test-mac" "$DEV/Transfers/sim-ipad/Sent"
+printf '{"id":"test-mac","name":"Test Mac","kind":"mac","lastSeen":"%s"}' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DEV/Devices/test-mac.json"
+cp "$SRC/Scanned.pdf" "$DEV/Transfers/sim-ipad/Sent/Sent from iPhone.pdf"
 # Without an iCloud account the app uses Documents/Inbox; leave two books there for the sync test.
 INBOX="$DATA/Documents/Inbox"
 rm -rf "$INBOX"; mkdir -p "$INBOX/Physics" "$INBOX/From Inbox"

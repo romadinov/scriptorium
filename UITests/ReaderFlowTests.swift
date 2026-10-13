@@ -11,6 +11,7 @@ final class ReaderFlowTests: XCTestCase {
         app = XCUIApplication()
         // Coordinate-based tests below assume vertical scrolling for PDF/DjVu; horizontal has its own test.
         app.launchArguments += ["-pageTurning", name.contains("Horizontal") || name.contains("IPhone") ? "horizontal" : "vertical"]
+        app.launchArguments += ["-deviceID", "sim-ipad"]          // matches scripts/seed-simulator.sh transfers
         app.launch()
     }
 
@@ -632,6 +633,34 @@ final class ReaderFlowTests: XCTestCase {
         wait(for: [expectation(for: moved, evaluatedWith: nil)], timeout: 5)
         XCTAssertFalse(offer.exists, "Offer stayed after Go")
         snap("position-2-moved")
+    }
+
+    /// scripts/seed-simulator.sh registers a "Test Mac" and leaves "Sent from iPhone.pdf" in this device's
+    /// transfer folder (local fallback for iCloud).
+    func testSendAndReceiveBooksBetweenDevices() throws {
+        let banner = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Imported 1 book from another device'")).firstMatch
+        XCTAssertTrue(banner.waitForExistence(timeout: 15), "Book sent to this device was not imported")
+        snap("transfer-1-received")
+        openFolder("Sent")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Sent from iPhone'")).firstMatch.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        openFolder("Physics")
+        let book = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Thermodynamics, PDF'")).firstMatch
+        XCTAssertTrue(book.waitForExistence(timeout: 5))
+        book.press(forDuration: 1.2)
+        let sendTo = app.buttons["Send to"]
+        XCTAssertTrue(sendTo.waitForExistence(timeout: 5), "No Send to in the book menu")
+        sendTo.tap()
+        let mac = app.buttons["Test Mac"]
+        XCTAssertTrue(mac.waitForExistence(timeout: 5), "Other device not listed")
+        snap("transfer-2-menu")
+        mac.tap()
+        sleep(1)
+        snap("transfer-2b-after-send")
+        let sent = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test Mac'")).firstMatch
+        XCTAssertTrue(sent.waitForExistence(timeout: 10), "No confirmation")
+        snap("transfer-3-sent")
     }
 
     func testKindleAZW3() throws {

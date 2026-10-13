@@ -16,6 +16,14 @@ struct ScriptoriumMacApp: App {
                 .environment(library)
                 .environment(settings)
                 .environment(router)
+                .environment(DeviceTransfers.shared)
+                .task {
+                    DeviceTransfers.shared.onImported = { [library] in library.reload() }
+                    await DeviceTransfers.shared.start()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    Task { await DeviceTransfers.shared.start() }
+                }
         }
         .defaultSize(width: 1000, height: 660)
         .commands {
@@ -37,6 +45,7 @@ struct ScriptoriumMacApp: App {
                     .environment(library)
                     .environment(settings)
                     .environment(router)
+                    .environment(DeviceTransfers.shared)
             }
         }
         .defaultSize(width: 1120, height: 820)
@@ -136,6 +145,18 @@ struct ReaderCommands: Commands {
                 if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
             }
             .keyboardShortcut("r", modifiers: [.command, .option])
+            Menu("Send To") {
+                ForEach(DeviceTransfers.shared.devices) { device in
+                    Button(device.name) {
+                        guard let book = reader?.model.book.url else { return }
+                        let parent = book.deletingLastPathComponent().standardizedFileURL
+                        let root = LibraryStore.rootURL.standardizedFileURL
+                        let folder = parent == root ? "" : String(parent.path.dropFirst(root.path.count + 1))
+                        DeviceTransfers.shared.send(book, folder: folder, to: device)
+                    }
+                }
+            }
+            Divider()
             Button("Show Assistant") { reader?.toggleAssistant() }
                 .keyboardShortcut("a", modifiers: [.command, .option])
             Button("Show Contents & Bookmarks") { reader?.toggleSidebar() }
