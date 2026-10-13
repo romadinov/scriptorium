@@ -41,7 +41,16 @@ extension UTType {
 /// Reading positions are stored in UserDefaults, keyed by path relative to the library root.
 @MainActor @Observable
 final class LibraryStore {
-    var path: [LibraryRoute] = []
+    var path: [LibraryRoute] = [] {
+        // Remember the open book, so the app reopens it next launch; going back to the library forgets it.
+        didSet {
+            if case .book(let book)? = path.last {
+                UserDefaults.standard.set(relativePath(book.url), forKey: "lastOpenBook")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "lastOpenBook")
+            }
+        }
+    }
     /// Bumped whenever files change, so folder views reload.
     private(set) var revision = 0
 
@@ -74,7 +83,25 @@ final class LibraryStore {
         // The iCloud Inbox is iPad-only; on the Mac the library is just local.
         #if os(iOS)
         Task { await resolveInbox() }
+        reopenLastBook()
         #endif
+    }
+
+    /// Opens the book that was open when the app last closed, inside its folder (so Back goes there).
+    private func reopenLastBook() {
+        guard let relative = UserDefaults.standard.string(forKey: "lastOpenBook"), !relative.isEmpty else { return }
+        let url = root.appending(path: relative)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            UserDefaults.standard.removeObject(forKey: "lastOpenBook")
+            return
+        }
+        var routes: [LibraryRoute] = []
+        var folder = root
+        for part in relative.split(separator: "/").dropLast() {
+            folder = folder.appending(path: String(part))
+            routes.append(.folder(Folder(url: folder)))
+        }
+        path = routes + [.book(Book(url: url))]
     }
 
     private func resolveInbox() async {

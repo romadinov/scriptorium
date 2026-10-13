@@ -12,6 +12,8 @@ final class ReaderFlowTests: XCTestCase {
         // Coordinate-based tests below assume vertical scrolling for PDF/DjVu; horizontal has its own test.
         app.launchArguments += ["-pageTurning", name.contains("Horizontal") || name.contains("IPhone") ? "horizontal" : "vertical"]
         app.launchArguments += ["-deviceID", "sim-ipad"]          // matches scripts/seed-simulator.sh transfers
+        // Tests start in the library, not in the book a previous test left open.
+        if !name.contains("Reopens") { app.launchArguments += ["-lastOpenBook", ""] }
         app.launch()
     }
 
@@ -693,6 +695,25 @@ final class ReaderFlowTests: XCTestCase {
         app.buttons["Send"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test iPad (iCloud Inbox › Fiction)'")).firstMatch
             .waitForExistence(timeout: 10), "No Inbox confirmation")
+    }
+
+    func testReopensLastBookOnLaunch() throws {
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        sleep(1)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(indicator.waitForExistence(timeout: 15), "Last book not reopened")
+        XCTAssertTrue(app.navigationBars["Thermodynamics"].exists || app.staticTexts["Thermodynamics"].exists)
+        snap("reopen-1-book")
+        // Back goes to its folder; then the next launch starts in the library.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Physics"].waitForExistence(timeout: 5), "Back did not go to the book's folder")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10), "Should start in the library after closing the book")
     }
 
     func testKindleAZW3() throws {
