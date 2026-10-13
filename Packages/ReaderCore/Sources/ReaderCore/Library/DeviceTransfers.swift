@@ -8,12 +8,29 @@ public struct DeviceInfo: Codable, Sendable, Equatable, Identifiable {
     public var name: String
     public var kind: Kind
     public var lastSeen: Date
+    /// The device's library folders (library-relative, e.g. "Physics/Thermo"), so a sender can pick one.
+    public var folders: [String]?
 
-    public init(id: String, name: String, kind: Kind, lastSeen: Date = Date()) {
+    public init(id: String, name: String, kind: Kind, lastSeen: Date = Date(), folders: [String]? = nil) {
         self.id = id
         self.name = name
         self.kind = kind
         self.lastSeen = lastSeen
+        self.folders = folders
+    }
+
+    /// Library folders of a library rooted at `root` (relative paths, sorted), for registration.
+    public static func folders(in root: URL) -> [String] {
+        let base = root.standardizedFileURL.path
+        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey],
+                                                        options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        var result: [String] = []
+        while let url = enumerator?.nextObject() as? URL {
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+            let path = url.standardizedFileURL.path
+            if path.hasPrefix(base + "/") { result.append(String(path.dropFirst(base.count + 1))) }
+        }
+        return result.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     public var systemImage: String {

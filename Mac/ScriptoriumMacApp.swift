@@ -50,6 +50,13 @@ struct ScriptoriumMacApp: App {
         }
         .defaultSize(width: 1120, height: 820)
 
+        Window("Send Book", id: "send-book") {
+            SendBookView()
+                .environment(DeviceTransfers.shared)
+                .frame(width: 420, height: 480)
+        }
+        .windowResizability(.contentSize)
+
         Settings {
             MacSettingsView()
                 .environment(settings)
@@ -98,6 +105,7 @@ struct MacReaderActions {
 
 struct ReaderCommands: Commands {
     @FocusedValue(\.reader) private var reader
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandMenu("Go") {
@@ -152,7 +160,8 @@ struct ReaderCommands: Commands {
                         let parent = book.deletingLastPathComponent().standardizedFileURL
                         let root = LibraryStore.rootURL.standardizedFileURL
                         let folder = parent == root ? "" : String(parent.path.dropFirst(root.path.count + 1))
-                        DeviceTransfers.shared.send(book, folder: folder, to: device)
+                        DeviceTransfers.shared.pending = .init(book: book, device: device, folder: folder)
+                        openWindow(id: "send-book")
                     }
                 }
             }

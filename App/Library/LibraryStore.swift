@@ -126,7 +126,10 @@ final class LibraryStore {
         Task.detached(priority: .utility) { _ = try? inbox.mirrorFolders() }
     }
 
-    func reload() { revision += 1 }
+    func reload() {
+        revision += 1
+        DeviceTransfers.shared.libraryChanged()
+    }
 
     func contents(of folder: Folder) -> (folders: [Folder], books: [Book]) {
         let urls = (try? FileManager.default.contentsOfDirectory(

@@ -29,3 +29,20 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: macLibrary.appending(path: "Physics/Entropy.pdf").path))
     #expect(!InboxSync.hasBooks(in: directory.transfers(for: "mac")))
 }
+
+@Test func devicesShareTheirFolderListsForTheSendPicker() throws {
+    let cloud = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let library = cloud.appending(path: "lib")
+    for folder in ["Physics/Thermo", "Fiction", ".hidden"] {
+        try FileManager.default.createDirectory(at: library.appending(path: folder), withIntermediateDirectories: true)
+    }
+    #expect(DeviceInfo.folders(in: library) == ["Fiction", "Physics", "Physics/Thermo"])
+    let directory = DeviceDirectory(root: cloud)
+    try directory.register(DeviceInfo(id: "iphone", name: "iPhone", kind: .iPhone, folders: DeviceInfo.folders(in: library)))
+    #expect(directory.devices(excluding: "mac").first?.folders == ["Fiction", "Physics", "Physics/Thermo"])
+    // A new folder typed in the picker is created on arrival.
+    let book = cloud.appending(path: "Book.epub")
+    try Data("x".utf8).write(to: book)
+    let sent = try directory.send(book, folder: "New Shelf", to: "iphone")
+    #expect(sent.path.hasSuffix("Transfers/iphone/New Shelf/Book.epub"))
+}

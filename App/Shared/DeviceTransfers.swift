@@ -19,6 +19,17 @@ final class DeviceTransfers {
     var status: String?
     /// Called after books were imported, so library views reload.
     @ObservationIgnored var onImported: (() -> Void)?
+    /// A book waiting for the reader to pick the destination folder (the send sheet).
+    var pending: PendingSend?
+
+    struct PendingSend: Identifiable {
+        let id = UUID()
+        let book: URL
+        let device: DeviceInfo
+        /// The book's folder here; preselected if the other device has it too.
+        let folder: String
+    }
+    @ObservationIgnored private var registration: Task<Void, Never>?
 
     @ObservationIgnored private var directory: DeviceDirectory?
     @ObservationIgnored private var isCloud = false
@@ -35,14 +46,34 @@ final class DeviceTransfers {
             isCloud = cloud
         }
         guard let directory else { return }
-        let me = DeviceInfo(id: DeviceIdentity.id, name: DeviceIdentity.name, kind: DeviceIdentity.kind)
-        await Task.detached(priority: .utility) { try? directory.register(me) }.value
+        await register()
         await refreshDevices()
         watcher.start(inbox: directory.transfers(for: DeviceIdentity.id), isCloud: isCloud, scope: NSMetadataQueryUbiquitousDataScope)
         await importArrivals()
     }
 
     func stop() { watcher.stop() }
+
+    /// Publishes this device (with its current library folders) for the others' Send to menus.
+    private func register() async {
+        guard let directory else { return }
+        let me = DeviceInfo(id: DeviceIdentity.id, name: DeviceIdentity.name, kind: DeviceIdentity.kind)
+        await Task.detached(priority: .utility) {
+            var info = me
+            info.folders = DeviceInfo.folders(in: LibraryStore.rootURL)
+            try? directory.register(info)
+        }.value
+    }
+
+    /// Folders were added, renamed or removed: re-publish the list (a few seconds later, once).
+    func libraryChanged() {
+        guard directory != nil else { return }
+        registration?.cancel()
+        registration = Task { [weak self] in
+            guard (try? await Task.sleep(for: .seconds(5))) != nil else { return }
+            await self?.register()
+        }
+    }
 
     func refreshDevices() async {
         guard let directory else { return }

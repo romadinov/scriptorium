@@ -656,8 +656,11 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(mac.waitForExistence(timeout: 5), "Other device not listed")
         snap("transfer-2-menu")
         mac.tap()
-        sleep(1)
-        snap("transfer-2b-after-send")
+        // Choose the folder on the other device: it reported Archive and Physics; Physics is preselected.
+        XCTAssertTrue(app.staticTexts["Folder on Test Mac"].waitForExistence(timeout: 5), "No folder picker")
+        app.staticTexts["Archive"].tap()
+        snap("transfer-2b-folders")
+        app.buttons["Send"].tap()
         let sent = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test Mac'")).firstMatch
         XCTAssertTrue(sent.waitForExistence(timeout: 10), "No confirmation")
         snap("transfer-3-sent")
@@ -669,6 +672,13 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Test Mac"].waitForExistence(timeout: 5))
         snap("transfer-4-reader-menu")
         app.buttons["Test Mac"].tap()
+        // A new folder there, typed in the picker.
+        let newFolder = app.textFields["New folder"]
+        XCTAssertTrue(newFolder.waitForExistence(timeout: 5))
+        newFolder.tap()
+        newFolder.typeText("From iPad")
+        snap("transfer-5-new-folder")
+        app.buttons["Send"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test Mac'")).firstMatch
             .waitForExistence(timeout: 10), "No confirmation in the reader")
     }

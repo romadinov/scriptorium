@@ -27,6 +27,9 @@ struct LibraryView: View {
                     }
                 }
         }
+        .sheet(item: Binding(get: { transfers.pending }, set: { transfers.pending = $0 })) { _ in
+            SendBookView().environment(transfers)
+        }
         // Books arriving from other devices and send confirmations, wherever you are in the library
         // (the reader shows sends in its own status line).
         .overlay(alignment: .bottom) {
