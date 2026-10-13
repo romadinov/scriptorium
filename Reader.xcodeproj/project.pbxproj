@@ -38,6 +38,7 @@
 		7B49954A65E4C37E796A43E8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1E990AFC7A9332B2AC6B13 /* SettingsView.swift */; };
 		7D3BD2EE615767A57CAF5E30 /* MacAnnotationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33DD102B979B5A846542DBD4 /* MacAnnotationEditor.swift */; };
 		7D934473BD62EA2034DFB851 /* ReaderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D50ED6D61D0776BC7B432C9 /* ReaderModel.swift */; };
+		81AEE5DD12A1E0F275A7B195 /* SendToKindle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5037B9776EE51DAF6A2A2A16 /* SendToKindle.swift */; };
 		88093EAF0CCD5B0D5A196515 /* TransferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 094B5AE862D1C5DED8DD2321 /* TransferView.swift */; };
 		8E9F6D414AFF072FD1C948EB /* Paginator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE6CE1A6FE443F5FC467FDAB /* Paginator.swift */; };
 		8F3C6AA501A224099675F7F5 /* InboxAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD8F32EB58A2CD39C018AD3 /* InboxAutomation.swift */; };
@@ -45,6 +46,7 @@
 		97EB8643C4F22989CFE41442 /* MacFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EB18013BEF232710B2EDD4C /* MacFlowTests.swift */; };
 		98C58A397921DDBA2F8D68DE /* PDFKitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F99F1B3375B9DD7B88E1C3A8 /* PDFKitView.swift */; };
 		9A3079A046A5E0ED7E3FAF88 /* MacBookIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = B72636D2BA40F176558A0255 /* MacBookIndex.swift */; };
+		9D093E71EC7ACCC99E90B58D /* SendToKindle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5037B9776EE51DAF6A2A2A16 /* SendToKindle.swift */; };
 		A3380EA9A4BD8E7D4C59652D /* PagedImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D898DB03683B4C2A2A7A7D /* PagedImageView.swift */; };
 		A6B1A96CE5F461CA9136E455 /* ReadAloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EF6C34659EAE99694BF514 /* ReadAloud.swift */; };
 		A6E2A29AD3656CC4B3B146C2 /* ReaderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D50ED6D61D0776BC7B432C9 /* ReaderModel.swift */; };
@@ -101,6 +103,7 @@
 		3D6C1D3BA7511FA6CA964C21 /* SendToMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendToMenu.swift; sourceTree = "<group>"; };
 		4123ECE629C6D7E255BCAD7B /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		4EB18013BEF232710B2EDD4C /* MacFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFlowTests.swift; sourceTree = "<group>"; };
+		5037B9776EE51DAF6A2A2A16 /* SendToKindle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendToKindle.swift; sourceTree = "<group>"; };
 		50DDEB6759BD6CF8EE219A29 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		5D9E681D721C220D47C24D60 /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		6ACF1F46BF750E48868C06EA /* ReaderUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ReaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -289,6 +292,7 @@
 				1DA9A741B605945E576B9C57 /* DeviceTransfers.swift */,
 				50DDEB6759BD6CF8EE219A29 /* Platform.swift */,
 				3210708FD2C6DCA964EB0114 /* RemotePositionPill.swift */,
+				5037B9776EE51DAF6A2A2A16 /* SendToKindle.swift */,
 				3D6C1D3BA7511FA6CA964C21 /* SendToMenu.swift */,
 			);
 			path = Shared;
@@ -472,6 +476,7 @@
 				B6239842E4B6C50E3BC038A6 /* ReaderScreen.swift in Sources */,
 				F724DA519FFC3D85D1BE9716 /* ReflowableView.swift in Sources */,
 				14B7F9A4705ABF8A9EA01714 /* RemotePositionPill.swift in Sources */,
+				81AEE5DD12A1E0F275A7B195 /* SendToKindle.swift in Sources */,
 				488F271AF5C8DE69C2A0ED0C /* SendToMenu.swift in Sources */,
 				1BE3116CCFBC9527091D2D6A /* SettingsStore.swift in Sources */,
 				7B49954A65E4C37E796A43E8 /* SettingsView.swift in Sources */,
@@ -515,6 +520,7 @@
 				653D99CE596977ABFF9D85D7 /* ReflowableView.swift in Sources */,
 				CE93A67E2158D2F4BF5C872D /* RemotePositionPill.swift in Sources */,
 				343FF33F2432BAA0F37D140D /* ScriptoriumMacApp.swift in Sources */,
+				9D093E71EC7ACCC99E90B58D /* SendToKindle.swift in Sources */,
 				292B8784CC573534982A7A39 /* SendToMenu.swift in Sources */,
 				48F6C9CF490DE02A28E9EFF2 /* SettingsStore.swift in Sources */,
 				F5EF2850283F094B8E31DF1D /* WordDocConverter.swift in Sources */,
@@ -552,7 +558,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Mac/$(MAC_ENTITLEMENTS).entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Mac/Info.plist;
@@ -576,7 +582,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Mac/$(MAC_ENTITLEMENTS).entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Mac/Info.plist;
@@ -757,7 +763,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;
@@ -779,7 +785,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;

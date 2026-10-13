@@ -7,6 +7,7 @@ struct MacSettingsView: View {
         TabView {
             AssistantSettings().tabItem { Label("Assistant", systemImage: "sparkles") }
             RecognitionSettings().tabItem { Label("Text Recognition", systemImage: "text.viewfinder") }
+            KindleSettings().tabItem { Label("Kindle", systemImage: "book.closed") }
         }
         .frame(width: 520)
         .scenePadding()
@@ -100,6 +101,21 @@ private struct RecognitionSettings: View {
             } footer: {
                 Text("For scanned books. Nothing selected = automatic detection; the first selected language is preferred.")
             }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct KindleSettings: View {
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        @Bindable var settings = settings
+        Form {
+            TextField("Send to Kindle address", text: $settings.kindleEmail, prompt: Text("name@kindle.com"))
+            Text("For Book › Send to Kindle (EPUB, PDF and Word, up to 50 MB by e-mail; bigger files go to Amazon's Send to Kindle app). "
+                 + KindleSender.approvedSendersHelp)
+                .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
     }

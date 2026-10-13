@@ -737,6 +737,35 @@ final class ReaderFlowTests: XCTestCase {
         snap("pace-2-picker")
     }
 
+    /// No Mail account on the simulator: after asking for the Kindle address it falls back to the share sheet.
+    func testSendToKindle() throws {
+        openFolder("Physics")
+        let djvu = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Thermodynamics, DJVU'")).firstMatch
+        XCTAssertTrue(djvu.waitForExistence(timeout: 5))
+        djvu.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Send to Kindle"].exists, "DjVu isn't a Kindle format")
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)).tap()
+        sleep(1)
+
+        let pdf = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Thermodynamics, PDF'")).firstMatch
+        pdf.press(forDuration: 1.2)
+        let kindle = app.buttons["Send to Kindle"]
+        XCTAssertTrue(kindle.waitForExistence(timeout: 5), "No Send to Kindle for a PDF")
+        kindle.tap()
+        let field = app.textFields["name@kindle.com"]
+        if field.waitForExistence(timeout: 5) {          // first time: asks for the address
+            field.tap()
+            field.typeText("reader_test@kindle.com")
+            snap("kindle-1-address")
+            app.buttons["Continue"].tap()
+        }
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 10)
+                      || app.navigationBars["UIActivityContentView"].waitForExistence(timeout: 2)
+                      || app.buttons["Copy"].waitForExistence(timeout: 2), "No share sheet")
+        snap("kindle-2-share")
+    }
+
     func testKindleAZW3() throws {
         openFolder("Fiction")
         open(bookMatching: "Pride and Prejudice (Kindle), AZW3")

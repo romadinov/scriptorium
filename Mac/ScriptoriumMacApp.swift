@@ -171,6 +171,11 @@ struct ReaderCommands: Commands {
                     }
                 }
             }
+            Button("Send to Kindle") {
+                guard let book = reader?.model.book.url else { return }
+                KindleSender.sendOnMac(book) { DeviceTransfers.shared.status = $0 }
+            }
+            .disabled(!(reader.map { KindleSender.supports($0.model.book.url) } ?? false))
             Divider()
             Button("Show Assistant") { reader?.toggleAssistant() }
                 .keyboardShortcut("a", modifiers: [.command, .option])

@@ -72,6 +72,15 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    TextField("name@kindle.com", text: $settings.kindleEmail)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.emailAddress)
+                } header: {
+                    Text("Send to Kindle")
+                } footer: {
+                    Text("Your Send to Kindle address, for sending EPUB, PDF and Word books to your Kindle. " + KindleSender.approvedSendersHelp)
+                }
+
+                Section {
                     Button("Suggest an Improvement…", systemImage: "lightbulb") {
                         dismiss()
                         Task { try? await Task.sleep(for: .milliseconds(400)); noteRequest.start(context: "Settings") }

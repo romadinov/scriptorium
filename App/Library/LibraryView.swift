@@ -30,6 +30,9 @@ struct LibraryView: View {
         .sheet(item: Binding(get: { transfers.pending }, set: { transfers.pending = $0 })) { _ in
             SendBookView().environment(transfers)
         }
+        .sheet(item: Binding(get: { KindleSender.shared.pending }, set: { KindleSender.shared.pending = $0 })) { pending in
+            SendToKindleSheet(book: pending.book)
+        }
         // Books arriving from other devices and send confirmations, wherever you are in the library
         // (the reader shows sends in its own status line).
         .overlay(alignment: .bottom) {
@@ -308,6 +311,7 @@ private struct FolderView: View {
     private func itemMenu(_ url: URL, name: String) -> some View {
         if !library.isDirectory(url) {
             SendToMenu(book: url)
+            SendToKindleButton(book: url)
         }
         Button("Rename", systemImage: "pencil") { naming = .rename(url, name) }
         Button("Move to…", systemImage: "folder") { moving = [url] }

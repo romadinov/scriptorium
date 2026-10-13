@@ -22,11 +22,17 @@ final class SettingsStore {
         didSet { Keychain.set(openAIKey, for: "openai") }
     }
 
+    /// Your Send to Kindle address (name@kindle.com), for "Send to Kindle".
+    var kindleEmail: String {
+        didSet { UserDefaults.standard.set(kindleEmail.trimmingCharacters(in: .whitespaces), forKey: "kindleEmail") }
+    }
+
     init() {
         llm = Self.load(LLMSettings.self, key: "llmSettings") ?? LLMSettings()
         ocrLanguages = UserDefaults.standard.stringArray(forKey: "ocrLanguages") ?? []
         anthropicKey = Keychain.get("anthropic") ?? ""
         openAIKey = Keychain.get("openai") ?? ""
+        kindleEmail = UserDefaults.standard.string(forKey: "kindleEmail") ?? ""
     }
 
     func makeProvider() throws -> LLMProvider {

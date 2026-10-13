@@ -273,6 +273,7 @@ private struct ReaderContent: View {
             SendToMenu(book: model.book.url)          // send this book to another device, while reading
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
+                SendToKindleButton(book: model.book.url)
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
             }
         }
@@ -358,6 +359,7 @@ private struct ReaderContent: View {
                 Button("Page Note", systemImage: pageNoteIcon) { Task { await model.annotatePage() } }
                 Button("Highlights & Notes", systemImage: "highlighter") { showHighlights = true }
                 SendToMenu(book: model.book.url)
+                SendToKindleButton(book: model.book.url)
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
