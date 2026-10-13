@@ -160,8 +160,10 @@ struct ReaderCommands: Commands {
                         let parent = book.deletingLastPathComponent().standardizedFileURL
                         let root = LibraryStore.rootURL.standardizedFileURL
                         let folder = parent == root ? "" : String(parent.path.dropFirst(root.path.count + 1))
-                        DeviceTransfers.shared.pending = .init(book: book, device: device, folder: folder)
-                        openWindow(id: "send-book")
+                        Task {
+                            await DeviceTransfers.shared.prepareSend(book, folder: folder, to: device)
+                            openWindow(id: "send-book")
+                        }
                     }
                 }
             }

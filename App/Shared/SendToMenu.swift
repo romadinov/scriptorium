@@ -19,10 +19,12 @@ struct SendToMenu: View {
                 Button(device.name, systemImage: device.systemImage) {
                     let parent = book.deletingLastPathComponent().standardizedFileURL
                     let folder = parent == library.root.standardizedFileURL ? "" : library.relativePath(parent)
-                    transfers.pending = .init(book: book, device: device, folder: folder)
-                    #if os(macOS)
-                    openWindow(id: "send-book")
-                    #endif
+                    Task {
+                        await transfers.prepareSend(book, folder: folder, to: device)
+                        #if os(macOS)
+                        openWindow(id: "send-book")
+                        #endif
+                    }
                 }
             }
         }
@@ -41,7 +43,7 @@ struct SendBookView: View {
         if let pending = transfers.pending {
             content(pending)
                 .onAppear {
-                    selection = (pending.device.folders ?? []).contains(pending.folder) ? pending.folder : ""
+                    selection = (pending.folders ?? []).contains(pending.folder) ? pending.folder : ""
                 }
         } else {
             ContentUnavailableView("Nothing to Send", systemImage: "paperplane")
@@ -49,7 +51,7 @@ struct SendBookView: View {
     }
 
     private func content(_ pending: DeviceTransfers.PendingSend) -> some View {
-        let folders = pending.device.folders ?? []
+        let folders = pending.folders ?? []
         return NavigationStack {
             List(selection: Binding(get: { creating ? nil : selection }, set: { if let value = $0 { selection = value; creating = false } })) {
                 Section {
@@ -60,9 +62,11 @@ struct SendBookView: View {
                             .tag(folder)
                     }
                 } header: {
-                    Text("Folder on \(pending.device.name)")
+                    Text(pending.inbox == nil ? "Folder on \(pending.device.name)" : "Folder in the iCloud Inbox")
                 } footer: {
-                    if pending.device.folders == nil {
+                    if pending.inbox != nil {
+                        Text("The Inbox mirrors \(pending.device.name)'s library; it imports from here into the same folder.")
+                    } else if pending.folders == nil {
                         Text("\(pending.device.name) hasn't shared its folders yet — open Scriptorium there once to see them.")
                     }
                 }
@@ -104,7 +108,7 @@ struct SendBookView: View {
     }
 
     private func send(_ pending: DeviceTransfers.PendingSend) {
-        transfers.send(pending.book, folder: destination(pending), to: pending.device)
+        transfers.send(pending.book, folder: destination(pending), to: pending.device, inbox: pending.inbox)
         transfers.pending = nil
         dismiss()
     }

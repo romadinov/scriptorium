@@ -111,7 +111,13 @@ public struct DeviceDirectory: Sendable {
     /// Returns where it went. A name already waiting there gets " 2", " 3"… so nothing is overwritten.
     @discardableResult
     public func send(_ book: URL, folder: String, to deviceID: String) throws -> URL {
-        var directory = transfers(for: deviceID)
+        try Self.deliver(book, into: transfers(for: deviceID), folder: folder)
+    }
+
+    /// Copies `book` into `base`/`folder` (e.g. a device's Transfers folder, or the iPad's iCloud Inbox).
+    @discardableResult
+    public static func deliver(_ book: URL, into base: URL, folder: String) throws -> URL {
+        var directory = base
         for part in folder.split(separator: "/") where !part.isEmpty && part != ".." { directory = directory.appending(path: String(part)) }
         try ICloudFiles.coordinatedCreateDirectory(directory)
         let ext = book.pathExtension

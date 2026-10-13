@@ -26,8 +26,25 @@ final class DeviceTransfers {
         let id = UUID()
         let book: URL
         let device: DeviceInfo
-        /// The book's folder here; preselected if the other device has it too.
+        /// The book's folder here; preselected if the destination has it too.
         let folder: String
+        /// Folders to choose from: the iPad's iCloud Inbox (which mirrors its library), else what the device reported.
+        let folders: [String]?
+        /// For an iPad: deliver into its iCloud Inbox, which it imports from (also in the background).
+        let inbox: URL?
+    }
+
+    /// Prepares the folder picker for sending `book` to `device`.
+    func prepareSend(_ book: URL, folder: String, to device: DeviceInfo) async {
+        guard device.kind == .iPad else {
+            pending = .init(book: book, device: device, folder: folder, folders: device.folders, inbox: nil)
+            return
+        }
+        let (inbox, folders) = await Task.detached(priority: .userInitiated) {
+            let (url, _) = InboxLocation.resolve()
+            return (url, DeviceInfo.folders(in: url))
+        }.value
+        pending = .init(book: book, device: device, folder: folder, folders: folders, inbox: inbox)
     }
     @ObservationIgnored private var registration: Task<Void, Never>?
 
@@ -82,14 +99,21 @@ final class DeviceTransfers {
     }
 
     /// Copies the book into the device's transfer folder; iCloud uploads it in the background.
-    func send(_ book: URL, folder: String, to device: DeviceInfo) {
+    func send(_ book: URL, folder: String, to device: DeviceInfo, inbox: URL? = nil) {
         guard let directory else { return }
         let title = book.deletingPathExtension().lastPathComponent
         status = "Sending “\(title)” to \(device.name)…"
         Task {
             do {
-                try await Task.detached(priority: .userInitiated) { try directory.send(book, folder: folder, to: device.id) }.value
-                status = "Sent “\(title)” to \(device.name). It appears there next time Scriptorium is open."
+                try await Task.detached(priority: .userInitiated) {
+                    if let inbox {
+                        try DeviceDirectory.deliver(book, into: inbox, folder: folder)
+                    } else {
+                        try directory.send(book, folder: folder, to: device.id)
+                    }
+                }.value
+                let place = inbox == nil ? "" : " (iCloud Inbox\(folder.isEmpty ? "" : " › " + folder))"
+                status = "Sent “\(title)” to \(device.name)\(place). It appears there next time Scriptorium is open."
             } catch {
                 status = "Couldn't send “\(title)”: \(error.localizedDescription)"
             }

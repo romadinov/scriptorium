@@ -681,6 +681,18 @@ final class ReaderFlowTests: XCTestCase {
         app.buttons["Send"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test Mac'")).firstMatch
             .waitForExistence(timeout: 10), "No confirmation in the reader")
+
+        // To an iPad: its iCloud Inbox folders (which mirror its library), delivered into the Inbox.
+        sleep(6)
+        app.buttons["Send to"].tap()
+        XCTAssertTrue(app.buttons["Test iPad"].waitForExistence(timeout: 5))
+        app.buttons["Test iPad"].tap()
+        XCTAssertTrue(app.staticTexts["Folder in the iCloud Inbox"].waitForExistence(timeout: 5), "iPad target not using the Inbox")
+        app.staticTexts["Fiction"].tap()
+        snap("transfer-6-inbox-folders")
+        app.buttons["Send"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sent “Thermodynamics” to Test iPad (iCloud Inbox › Fiction)'")).firstMatch
+            .waitForExistence(timeout: 10), "No Inbox confirmation")
     }
 
     func testKindleAZW3() throws {

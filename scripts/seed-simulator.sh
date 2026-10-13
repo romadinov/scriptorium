@@ -40,6 +40,7 @@ DEV="$DATA/Documents/Devices"
 rm -rf "$DEV"; mkdir -p "$DEV/Devices" "$DEV/Transfers/test-mac" "$DEV/Transfers/sim-ipad/Sent"
 printf '{"id":"test-mac","name":"Test Mac","kind":"mac","lastSeen":"%s","folders":["Archive","Physics"]}' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DEV/Devices/test-mac.json"
 cp "$SRC/Scanned.pdf" "$DEV/Transfers/sim-ipad/Sent/Sent from iPhone.pdf"
+printf '{"id":"test-ipad","name":"Test iPad","kind":"iPad","lastSeen":"%s"}' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DEV/Devices/test-ipad.json"
 # Without an iCloud account the app uses Documents/Inbox; leave two books there for the sync test.
 INBOX="$DATA/Documents/Inbox"
 rm -rf "$INBOX"; mkdir -p "$INBOX/Physics" "$INBOX/From Inbox"
