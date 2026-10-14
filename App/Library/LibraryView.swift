@@ -311,7 +311,6 @@ private struct FolderView: View {
     private func itemMenu(_ url: URL, name: String) -> some View {
         if !library.isDirectory(url) {
             SendToMenu(book: url)
-            SendToKindleButton(book: url)
         }
         Button("Rename", systemImage: "pencil") { naming = .rename(url, name) }
         Button("Move to…", systemImage: "folder") { moving = [url] }

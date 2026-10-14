@@ -221,7 +221,6 @@ struct MacLibraryView: View {
                 Button("Open") { urls.forEach { open(Book(url: $0)) } }
                 if urls.count == 1, let url = urls.first {
                     SendToMenu(book: url)
-                    SendToKindleButton(book: url)
                 }
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(Array(urls)) }
                 if urls.count == 1, let url = urls.first {

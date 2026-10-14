@@ -27,6 +27,10 @@ struct SendToMenu: View {
                     }
                 }
             }
+            if KindleSender.supports(book) {
+                Divider()
+                SendToKindleButton(book: book)
+            }
         }
     }
 }

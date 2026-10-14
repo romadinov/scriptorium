@@ -743,13 +743,17 @@ final class ReaderFlowTests: XCTestCase {
         let djvu = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Thermodynamics, DJVU'")).firstMatch
         XCTAssertTrue(djvu.waitForExistence(timeout: 5))
         djvu.press(forDuration: 1.2)
-        XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Send to"].waitForExistence(timeout: 5))
+        app.buttons["Send to"].tap()
+        sleep(1)
         XCTAssertFalse(app.buttons["Send to Kindle"].exists, "DjVu isn't a Kindle format")
         app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)).tap()
         sleep(1)
 
         let pdf = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Thermodynamics, PDF'")).firstMatch
         pdf.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Send to"].waitForExistence(timeout: 5))
+        app.buttons["Send to"].tap()
         let kindle = app.buttons["Send to Kindle"]
         XCTAssertTrue(kindle.waitForExistence(timeout: 5), "No Send to Kindle for a PDF")
         kindle.tap()
