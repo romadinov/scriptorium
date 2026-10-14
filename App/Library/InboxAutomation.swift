@@ -147,15 +147,16 @@ enum InboxBackgroundImport {
     private static func run(_ task: BGTask) {
         schedule()   // keep the chain going
         let work = Task.detached(priority: .utility) {
-            let (inbox, _) = InboxLocation.resolve()
-            let report = await InboxSync(library: LibraryStore.rootURL, inbox: inbox).sync()
+            let report = await LibraryStore.usesInbox
+                ? await InboxSync(library: LibraryStore.rootURL, inbox: InboxLocation.resolve().url).sync() : nil
             let sent = await DeviceTransfers.importInBackground()      // books other devices sent here
-            if !report.imported.isEmpty || !sent.isEmpty {
+            let imported = (report?.imported ?? []) + sent
+            if !imported.isEmpty {
                 let previous = UserDefaults.standard.stringArray(forKey: pendingReportKey) ?? []
-                UserDefaults.standard.set(previous + report.imported + sent, forKey: pendingReportKey)
+                UserDefaults.standard.set(previous + imported, forKey: pendingReportKey)
             }
-            log.info("Background inbox import: \(report.summary, privacy: .public)")
-            task.setTaskCompleted(success: report.failed.isEmpty)
+            log.info("Background import: \(report?.summary ?? "no Inbox", privacy: .public); \(sent.count) sent here")
+            task.setTaskCompleted(success: report?.failed.isEmpty ?? true)
         }
         task.expirationHandler = { work.cancel() }
     }

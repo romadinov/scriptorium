@@ -87,13 +87,22 @@ public struct InboxSync: Sendable {
         for (relative, url) in Self.files(under: inbox) {
             // Background runs can be cut short; whatever was already moved stays moved.
             if Task.isCancelled { break }
-            let name = url.lastPathComponent
-            guard DocumentOpener.canOpen(url) else {
-                report.skipped.append(relative)
-                continue
-            }
+            var name = url.lastPathComponent
             let folder = library.appending(path: (relative as NSString).deletingLastPathComponent)
             do {
+                if !DocumentOpener.canOpen(url) {
+                    // Saved without an extension (e.g. "Paper title " from a share sheet): recognise it by its contents.
+                    guard url.pathExtension.isEmpty else {
+                        report.skipped.append(relative)
+                        continue
+                    }
+                    try await ensureDownloaded(url)
+                    guard let ext = BookFormat.sniffExtension(url) else {
+                        report.skipped.append(relative)
+                        continue
+                    }
+                    name = name.trimmingCharacters(in: .whitespaces) + "." + ext
+                }
                 try await ensureDownloaded(url)
                 let existing = folder.appending(path: name)
                 if FileManager.default.fileExists(atPath: existing.path),
@@ -181,7 +190,12 @@ public enum ICloudFiles {
         guard FileManager.default.isUbiquitousItem(at: url) else { return }
         try FileManager.default.startDownloadingUbiquitousItem(at: url)
         let deadline = Date().addingTimeInterval(300)
+        let placeholder = url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).icloud")
         while Date() < deadline {
+            // Gone (another device imported it meanwhile): stop waiting instead of spinning until the deadline.
+            if !FileManager.default.fileExists(atPath: url.path), !FileManager.default.fileExists(atPath: placeholder.path) {
+                throw CocoaError(.fileNoSuchFile)
+            }
             var copy = url
             copy.removeAllCachedResourceValues()
             let status = try? copy.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus

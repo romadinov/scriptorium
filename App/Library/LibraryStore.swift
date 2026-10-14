@@ -80,9 +80,10 @@ final class LibraryStore {
     }
 
     init() {
-        // The iCloud Inbox is iPad-only; on the Mac the library is just local.
+        // The iCloud Inbox is the iPad's drop folder (Send to iPad delivers there too). The iPhone leaves it
+        // alone, or it would import books meant for the iPad; it receives books through Send to. Mac: local only.
         #if os(iOS)
-        Task { await resolveInbox() }
+        if Self.usesInbox { Task { await resolveInbox() } }
         reopenLastBook()
         #endif
     }
@@ -103,6 +104,9 @@ final class LibraryStore {
         }
         path = routes + [.book(Book(url: url))]
     }
+
+    /// Only the iPad imports from (and mirrors its folders into) the shared iCloud Inbox.
+    @MainActor static var usesInbox: Bool { DeviceIdentity.kind == .iPad }
 
     private func resolveInbox() async {
         let root = root
@@ -139,6 +143,7 @@ final class LibraryStore {
 
     /// Imports everything waiting in the Inbox into the matching library folders and empties the Inbox.
     func syncInbox() async -> InboxSync.Report? {
+        guard Self.usesInbox else { return nil }
         if inbox == nil { await resolveInbox() }
         guard let inbox, !isSyncingInbox else { return nil }
         isSyncingInbox = true

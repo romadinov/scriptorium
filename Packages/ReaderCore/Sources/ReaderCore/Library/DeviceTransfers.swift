@@ -65,7 +65,7 @@ public struct DeviceDirectory: Sendable {
         root.appending(path: "Transfers").appending(path: deviceID)
     }
 
-    private var devicesFolder: URL { root.appending(path: "Devices") }
+    public var devicesFolder: URL { root.appending(path: "Devices") }
 
     public func register(_ device: DeviceInfo) throws {
         try FileManager.default.createDirectory(at: devicesFolder, withIntermediateDirectories: true)

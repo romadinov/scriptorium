@@ -48,6 +48,10 @@ final class DeviceTransfers {
     }
     @ObservationIgnored private var registration: Task<Void, Never>?
 
+    /// A device registering (or updating its folders) while this app is open.
+    @ObservationIgnored private lazy var devicesWatcher = FolderChangeWatcher { [weak self] in
+        Task { await self?.refreshDevices() }
+    }
     @ObservationIgnored private var directory: DeviceDirectory?
     @ObservationIgnored private var isCloud = false
     @ObservationIgnored private var importing = false
@@ -66,10 +70,14 @@ final class DeviceTransfers {
         await register()
         await refreshDevices()
         watcher.start(inbox: directory.transfers(for: DeviceIdentity.id), isCloud: isCloud, scope: NSMetadataQueryUbiquitousDataScope)
+        if isCloud { devicesWatcher.start(directory.devicesFolder, scope: NSMetadataQueryUbiquitousDataScope) }
         await importArrivals()
     }
 
-    func stop() { watcher.stop() }
+    func stop() {
+        watcher.stop()
+        devicesWatcher.stop()
+    }
 
     /// Publishes this device (with its current library folders) for the others' Send to menus.
     private func register() async {
@@ -148,5 +156,48 @@ final class DeviceTransfers {
         let inbox = DeviceDirectory(root: root).transfers(for: DeviceIdentity.id)
         guard InboxSync.hasBooks(in: inbox) else { return [] }
         return await InboxSync(library: LibraryStore.rootURL, inbox: inbox).sync().imported
+    }
+}
+
+/// Calls `onChange` (debounced) when iCloud adds or updates files in a folder, while the app is open.
+@MainActor
+final class FolderChangeWatcher {
+    private var query: NSMetadataQuery?
+    private var observers: [NSObjectProtocol] = []
+    private var debounce: Task<Void, Never>?
+    private let onChange: @MainActor () -> Void
+
+    init(onChange: @escaping @MainActor () -> Void) {
+        self.onChange = onChange
+    }
+
+    func start(_ folder: URL, scope: String) {
+        stop()
+        let query = NSMetadataQuery()
+        query.searchScopes = [scope]
+        query.predicate = NSPredicate(format: "%K BEGINSWITH %@", NSMetadataItemPathKey, folder.standardizedFileURL.path)
+        query.notificationBatchingInterval = 2
+        // Only updates: the initial gathering matches what was just read at start.
+        observers.append(NotificationCenter.default.addObserver(forName: .NSMetadataQueryDidUpdate, object: query, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.changed() }
+        })
+        query.start()
+        self.query = query
+    }
+
+    func stop() {
+        query?.stop()
+        query = nil
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+        debounce?.cancel()
+    }
+
+    private func changed() {
+        debounce?.cancel()
+        debounce = Task { [weak self] in
+            guard (try? await Task.sleep(for: .seconds(1))) != nil else { return }
+            self?.onChange()
+        }
     }
 }

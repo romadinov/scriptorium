@@ -94,14 +94,14 @@ private struct FolderView: View {
     private var fileList: some View {
         List(selection: $selection) {
             ForEach(folders) { sub in
-                NavigationLink(value: LibraryRoute.folder(sub)) { FolderRow(folder: sub) }
+                NavigationLink(value: LibraryRoute.folder(sub)) { FolderRow(folder: sub, chevron: false) }
                     .tag(sub.url)
                     .listRowInsets(EdgeInsets())
                     .contextMenu { itemMenu(sub.url, name: sub.name) }
                     .swipeActions(edge: .trailing) { swipeButtons(sub.url) }
             }
             ForEach(books) { book in
-                NavigationLink(value: LibraryRoute.book(book)) { BookRow(book: book) }
+                NavigationLink(value: LibraryRoute.book(book)) { BookRow(book: book, chevron: false) }
                     .tag(book.url)
                     .listRowInsets(EdgeInsets())
                     .contextMenu { itemMenu(book.url, name: book.title) }
@@ -177,7 +177,9 @@ private struct FolderView: View {
         }
         .searchable(text: $query, prompt: "Search all books")
         .navigationTitle(isRoot ? "Library" : folder.name)
-        .refreshable { await syncInbox() }
+        .refreshable {
+            if LibraryStore.usesInbox { await syncInbox() } else { await DeviceTransfers.shared.importArrivals() }
+        }
         .task(id: library.revision) { reload() }
         .toolbar {
             if sizeClass == .compact {
@@ -187,7 +189,9 @@ private struct FolderView: View {
                     Button("Import", systemImage: "plus") { importing = true }
                     Menu("More", systemImage: "ellipsis.circle") {
                         if layout == .list { Button("Select", systemImage: "checkmark.circle") { editMode = .active; selection = [] } }
-                        Button("Sync iCloud Inbox", systemImage: "icloud.and.arrow.down") { Task { await syncInbox() } }
+                        if LibraryStore.usesInbox {
+                            Button("Sync iCloud Inbox", systemImage: "icloud.and.arrow.down") { Task { await syncInbox() } }
+                        }
                         Button("Bookmarks", systemImage: "bookmark") { showNotes = true }
                         Button("Read Later", systemImage: "text.badge.plus") { showReadLater = true }
                         Divider()
@@ -510,6 +514,8 @@ enum LibraryLayout: String {
 
 private struct BookRow: View {
     let book: Book
+    /// Off inside a List, which draws its own disclosure indicator.
+    var chevron = true
     @State private var thumbnail: UIImage?
 
     var body: some View {
@@ -531,7 +537,9 @@ private struct BookRow: View {
                 Text(book.format).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).padding(.trailing, 24)
+            if chevron {
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).padding(.trailing, 24)
+            }
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
@@ -541,6 +549,8 @@ private struct BookRow: View {
 
 private struct FolderRow: View {
     let folder: Folder
+    /// Off inside a List, which draws its own disclosure indicator.
+    var chevron = true
     @Environment(LibraryStore.self) private var library
 
     var body: some View {
@@ -552,7 +562,9 @@ private struct FolderRow: View {
                 Text(summary).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).padding(.trailing, 24)
+            if chevron {
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).padding(.trailing, 24)
+            }
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
