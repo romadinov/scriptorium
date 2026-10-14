@@ -12,7 +12,9 @@ IOS_DD=/tmp/scriptorium-ios-release
 xcodebuild -project Reader.xcodeproj -scheme Reader -configuration Release -destination "generic/platform=iOS" \
   -derivedDataPath "$IOS_DD" -allowProvisioningUpdates build -quiet
 cp -R "$IOS_DD/Build/Products/Release-iphoneos/"*.dSYM "$SYMS/$BUILD/" 2>/dev/null || true
-if xcrun devicectl list devices 2>/dev/null | grep -q "$IPAD.*available\|$IPAD.*connected"; then
+# Capture first: with pipefail, `grep -q` closing the pipe early made a connected iPad look absent.
+DEVICES=$(xcrun devicectl list devices 2>/dev/null || true)
+if grep -q "$IPAD.*\(available\|connected\)" <<< "$DEVICES"; then
   xcrun devicectl device install app --device "$IPAD" "$IOS_DD/Build/Products/Release-iphoneos/Reader.app" >/dev/null && echo "iPad: installed build $BUILD"
 else
   echo "iPad: not connected, skipped"
