@@ -32,7 +32,7 @@ targets:
         MARKETING_VERSION: "1.0"
         # Raise for every install (scripts/bump-build.sh): iCloud only re-reads NSUbiquitousContainers
         # (the "Scriptorium" folder in iCloud Drive) when the build number changes.
-        CURRENT_PROJECT_VERSION: "25"
+        CURRENT_PROJECT_VERSION: "26"
         CODE_SIGN_ENTITLEMENTS: App/Scriptorium.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -41,6 +41,8 @@ targets:
         CFBundleDisplayName: Scriptorium
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Only standard encryption (HTTPS), so no export-compliance questions per build.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations~iphone:
@@ -166,7 +168,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "25"
+        CURRENT_PROJECT_VERSION: "26"
         # scripts/test-mac.sh sets MAC_ENTITLEMENTS=ScriptoriumMac-Local (ad hoc signing, no iCloud).
         MAC_ENTITLEMENTS: ScriptoriumMac
         CODE_SIGN_ENTITLEMENTS: Mac/$(MAC_ENTITLEMENTS).entitlements
@@ -179,6 +181,8 @@ targets:
         CFBundleDisplayName: Scriptorium
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Only standard encryption (HTTPS), so no export-compliance questions per build.
+        ITSAppUsesNonExemptEncryption: false
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true

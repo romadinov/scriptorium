@@ -1,3 +1,4 @@
+#if DEBUG
 import AppKit
 import WebKit
 
@@ -40,3 +41,4 @@ enum DebugSnapshots {
         (view as? WKWebView).map { [$0] } ?? view.subviews.flatMap(webViews(in:))
     }
 }
+#endif

@@ -131,11 +131,13 @@ struct MacLibraryView: View {
         }
         .onAppear {
             if !router.incoming.isEmpty { handleIncoming(router.incoming); router.incoming = [] }
+            #if DEBUG
             DebugSnapshots.scheduleIfRequested()
             // Development: `-openBook "Physics/Thermodynamics.pdf"` opens a book window at launch.
             if let path = UserDefaults.standard.string(forKey: "openBook") {
                 open(Book(url: library.root.appending(path: path)))
             }
+            #endif
         }
     }
 
