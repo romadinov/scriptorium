@@ -699,6 +699,31 @@ final class ReaderFlowTests: XCTestCase {
             .waitForExistence(timeout: 10), "No Inbox confirmation")
     }
 
+    /// Text size: in the toolbar's Text Size & Layout menu (iPad) or More (iPhone); tapping Larger enlarges the text.
+    func testTextSizeControls() throws {
+        openFolder("Fiction")
+        open(bookMatching: "Pride and Prejudice, EPUB")
+        let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chapter '")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 20))
+        sleep(2)
+        snap("textsize-1-default")
+        let menu = UIDevice.current.userInterfaceIdiom == .phone ? app.buttons["More"] : app.buttons["Text Size & Layout"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5), "No text size menu")
+        menu.tap()
+        let larger = app.buttons["Larger Text"]
+        XCTAssertTrue(larger.waitForExistence(timeout: 5), "No Larger Text control")
+        let sizeButton = app.buttons.matching(NSPredicate(format: "label MATCHES '[0-9]+%'")).firstMatch
+        let before = Int(sizeButton.label.dropLast()) ?? 0
+        snap("textsize-2-menu")
+        larger.tap()
+        sleep(2)
+        snap("textsize-3-larger")
+        menu.tap()
+        XCTAssertTrue(sizeButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(Int(sizeButton.label.dropLast()), before + 10, "Larger didn't add 10%")
+        sizeButton.tap()   // back to 100%
+    }
+
     /// A link with a quote lands on the passage and selects it. The links (with the seeded books' fingerprints)
     /// come from the host via TEST_RUNNER_QUOTE_LINK_PDF / _EPUB; skipped without them.
     func testQuoteLinksLandOnThePassage() throws {

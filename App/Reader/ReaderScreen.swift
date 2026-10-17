@@ -207,6 +207,11 @@ private struct ReaderContent: View {
         if let book = model.reflowable {
             ReflowableView(model: model, book: book, layout: effectiveLayout, fontScale: fontScale)
                 .id(effectiveLayout)
+                // Pinch to change the text size (applied when the pinch ends, so the text reflows once).
+                .simultaneousGesture(MagnifyGesture().onEnded { value in
+                    fontScale = TextSizeControls.clamp(fontScale * value.magnification)
+                    model.statusMessage = "Text size \(Int((fontScale * 100).rounded()))%"
+                })
         } else if model.imageMode || model.pdfDocument == nil {
             if turning == .horizontal {
                 HorizontalPageView(model: model).id(turning)
@@ -240,16 +245,12 @@ private struct ReaderContent: View {
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             if model.reflowable != nil {
-                Menu("Reading options", systemImage: "textformat.size") {
+                Menu("Text Size & Layout", systemImage: "textformat.size") {
+                    TextSizeControls(fontScale: $fontScale)
                     if !(model.source is WebArchiveSource) {
                         Picker("Layout", selection: $layout) {
                             ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                         }
-                    }
-                    Section("Text size") {
-                        Button("Larger", systemImage: "plus.magnifyingglass") { fontScale = min(2.0, fontScale + 0.1) }
-                        Button("Smaller", systemImage: "minus.magnifyingglass") { fontScale = max(0.7, fontScale - 0.1) }
-                        Button("Default size", systemImage: "arrow.counterclockwise") { fontScale = 1.0 }
                     }
                 }
             } else {
@@ -385,10 +386,7 @@ private struct ReaderContent: View {
                             ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                         }
                     }
-                    Section("Text size") {
-                        Button("Larger", systemImage: "plus.magnifyingglass") { fontScale = min(2.0, fontScale + 0.1) }
-                        Button("Smaller", systemImage: "minus.magnifyingglass") { fontScale = max(0.7, fontScale - 0.1) }
-                    }
+                    TextSizeControls(fontScale: $fontScale)
                 } else {
                     Picker("Page turning", selection: $turning) {
                         ForEach(PageTurning.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
@@ -606,6 +604,22 @@ private struct ReadingLinkActions: View {
                 Button("Send to Tasker", systemImage: "checklist") { TaskerSender.send(model) }
             }
         }
+    }
+}
+
+/// Smaller / size (tap to reset) / Larger, side by side at the top of the menu.
+private struct TextSizeControls: View {
+    @Binding var fontScale: Double
+    static func clamp(_ scale: Double) -> Double { min(3.0, max(0.6, (scale * 20).rounded() / 20)) }
+
+    var body: some View {
+        ControlGroup("Text Size") {
+            Button("Smaller Text", systemImage: "textformat.size.smaller") { fontScale = Self.clamp(fontScale - 0.1) }
+            // Shows the size; tapping it goes back to 100%.
+            Button("\(Int((fontScale * 100).rounded()))%") { fontScale = 1.0 }
+            Button("Larger Text", systemImage: "textformat.size.larger") { fontScale = Self.clamp(fontScale + 0.1) }
+        }
+        .controlGroupStyle(.compactMenu)
     }
 }
 
