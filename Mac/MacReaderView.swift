@@ -109,6 +109,9 @@ struct MacReaderContent: View {
                 showAssistant = true
                 model.ask("", action: .explain, settings: settings)
             }
+            if TaskerSender.isAvailable {
+                Button("Send to Tasker") { TaskerSender.send(model, highlight: highlight) }
+            }
             Button("Remove Highlight", role: .destructive) { Task { await model.removeHighlight(highlight) } }
         } message: { highlight in
             Text("“\(highlight.text.prefix(140))”")

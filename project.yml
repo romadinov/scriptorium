@@ -105,6 +105,8 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.romadinov.reader.open
             CFBundleURLSchemes: [scriptorium]
+        # canOpenURL(tasker://) shows "Send to Tasker" only when Tasker is installed.
+        LSApplicationQueriesSchemes: [tasker]
         # Background import from the iCloud Inbox.
         UIBackgroundModes: [fetch, processing, audio]
         BGTaskSchedulerPermittedIdentifiers:

@@ -268,12 +268,13 @@ final class ReaderModel {
         overallPace = UserDefaults.standard.data(forKey: "pace:all").flatMap { try? decoder.decode(ReadingPace.self, from: $0) } ?? ReadingPace()
     }
 
-    /// Times each step forward by one page; skimming, pauses and jumps don't count.
+    /// Times each step forward by one page, or by a two-page spread (PDFs side by side on iPad, timed per page);
+    /// skimming, pauses and jumps don't count.
     func notePageTurn() {
         let page = readingPageNumber, now = Date()
         defer { lastTurn = (page, now) }
-        guard let last = lastTurn, page == last.page + 1 else { return }
-        let seconds = now.timeIntervalSince(last.at)
+        guard let last = lastTurn, page - last.page == 1 || page - last.page == 2 else { return }
+        let seconds = now.timeIntervalSince(last.at) / Double(page - last.page)
         guard pace.record(seconds) else { return }
         overallPace.record(seconds)
         let encoder = JSONEncoder()
@@ -471,6 +472,23 @@ final class ReaderModel {
         } else {
             go(to: highlight.location.pageIndex)
         }
+    }
+
+    /// A link to where the reader is (or to `highlight`), titled "Book — p. N" / "Book — Chapter", for Tasker,
+    /// the share sheet and Copy Link. Nil until the book's fingerprint is known.
+    func readingLink(highlight: Highlight? = nil) -> (url: URL, title: String, text: String)? {
+        guard let documentID else { return nil }
+        // A selection that is exactly a highlight on this page counts as selecting that highlight.
+        let highlight = highlight ?? (selection.isEmpty ? nil : highlights.first {
+            $0.text == selection && $0.location.pageIndex == currentPage
+        })
+        let page = highlight?.location.pageIndex ?? currentPage
+        let link = DeepLink(documentID: documentID, page: page, progress: highlight == nil ? pageProgress : 0,
+                            highlightID: highlight?.id)
+        let chapter = reflowable.flatMap { $0.chapterTitles.indices.contains(page) ? $0.chapterTitles[page] : "Chapter \(page + 1)" }
+        let title = ReadingLocationTitle.make(book: book.title, page: page, chapterTitle: chapter)
+        let text = [highlight?.text ?? selection, highlight?.note ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        return (link.url, title, text)
     }
 
     func locationLabel(_ location: Highlight.Location) -> String {

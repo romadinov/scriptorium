@@ -699,6 +699,35 @@ final class ReaderFlowTests: XCTestCase {
             .waitForExistence(timeout: 10), "No Inbox confirmation")
     }
 
+    /// iPhone simulator with Tasker installed: More › Send to Tasker hands the page link to Tasker,
+    /// and Share Link to Page is offered.
+    func testSendToTasker() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone only")
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
+        sleep(1)
+        app.buttons["More"].tap()
+        XCTAssertTrue(app.buttons["Share Link to Page"].waitForExistence(timeout: 5), "No Share Link to Page")
+        let send = app.buttons["Send to Tasker"]
+        XCTAssertTrue(send.exists, "No Send to Tasker (is Tasker installed on this simulator?)")
+        snap("tasker-1-menu")
+        send.tap()
+        sleep(3)
+        snap("tasker-1b-after-tap")
+        let tasker = XCUIApplication(bundleIdentifier: "com.romadinov.tasker")
+        // iOS may ask to confirm opening another app.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let open = springboard.alerts.buttons["Open"].firstMatch
+        if open.waitForExistence(timeout: 10) {
+            snap("tasker-2-confirm")
+            open.tap()
+        }
+        XCTAssertTrue(tasker.wait(for: .runningForeground, timeout: 15), "Tasker did not open")
+        sleep(2)
+        snap("tasker-2-captured")
+    }
+
     func testReopensLastBookOnLaunch() throws {
         openFolder("Physics")
         open(bookMatching: "Thermodynamics, PDF")

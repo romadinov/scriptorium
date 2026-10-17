@@ -109,7 +109,8 @@ private struct ReaderContent: View {
                         onDictionary: { dictionaryTerm = DictionaryTerm(text: model.selection) },
                         onTranslate: { showTranslation = true },
                         onHighlight: { color in Task { await model.addHighlight(color: color) } },
-                        onNote: { Task { await model.annotateSelection() } })
+                        onNote: { Task { await model.annotateSelection() } },
+                        onTasker: TaskerSender.isAvailable ? { TaskerSender.send(model) } : nil)
                 }
             }
             .padding(.bottom, 20)
@@ -177,6 +178,9 @@ private struct ReaderContent: View {
                 model.selection = highlight.text
                 showAssistant = true
                 model.ask("", action: .explain, settings: settings)
+            }
+            if TaskerSender.isAvailable {
+                Button("Send to Tasker") { TaskerSender.send(model, highlight: highlight) }
             }
             Button("Remove highlight", role: .destructive) { Task { await model.removeHighlight(highlight) } }
         } message: { highlight in
@@ -271,6 +275,7 @@ private struct ReaderContent: View {
             Button("Highlights", systemImage: "highlighter") { showHighlights = true }
                 .popover(isPresented: $showHighlights) { bookIndex(.highlights).frame(minWidth: 360, minHeight: 460) }
             SendToMenu(book: model.book.url)          // send this book to another device, while reading
+            ReadingLinkActions(model: model)
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
@@ -358,6 +363,7 @@ private struct ReaderContent: View {
                 Button("Page Note", systemImage: pageNoteIcon) { Task { await model.annotatePage() } }
                 Button("Highlights & Notes", systemImage: "highlighter") { showHighlights = true }
                 SendToMenu(book: model.book.url)
+                ReadingLinkActions(model: model)
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
@@ -580,6 +586,23 @@ struct DictionaryTerm: Identifiable {
     var id: String { text }
 }
 
+/// Share a link to this page (title + deep link, so Tasker's share extension can capture it) and Send to Tasker.
+private struct ReadingLinkActions: View {
+    let model: ReaderModel
+
+    var body: some View {
+        if let link = model.readingLink() {
+            ShareLink(item: link.url, subject: Text(link.title), message: link.text.isEmpty ? nil : Text(link.text),
+                      preview: SharePreview(link.title)) {
+                Label("Share Link to Page", systemImage: "link")
+            }
+            if TaskerSender.isAvailable {
+                Button("Send to Tasker", systemImage: "checklist") { TaskerSender.send(model) }
+            }
+        }
+    }
+}
+
 private struct SelectionBar: View {
     let selection: String
     let onAction: (QuickAction) -> Void
@@ -588,6 +611,8 @@ private struct SelectionBar: View {
     let onTranslate: () -> Void
     let onHighlight: (Highlight.Color) -> Void
     let onNote: () -> Void
+    /// Nil when Tasker isn't installed.
+    let onTasker: (() -> Void)?
 
     private var isShort: Bool { selection.split(whereSeparator: \.isWhitespace).count <= 3 }
 
@@ -622,6 +647,9 @@ private struct SelectionBar: View {
             bar("Apple Translate", "globe", showTitles, action: onTranslate)
             Divider().frame(height: 24)
             bar("Ask…", "sparkles", showTitles, action: onAsk)
+            if let onTasker {
+                bar("Send to Tasker", "checklist", showTitles, action: onTasker)
+            }
         }
         .fixedSize()
     }

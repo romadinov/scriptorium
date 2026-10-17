@@ -112,6 +112,12 @@ struct ReaderCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        CommandGroup(after: .pasteboard) {
+            // A link to this page (or the selected highlight); Tasker's Clip hotkey relies on ⌃⌘C.
+            Button("Copy Link") { reader.map { TaskerSender.copyLink($0.model) } }
+                .keyboardShortcut("c", modifiers: [.command, .control])
+                .disabled(reader == nil)
+        }
         CommandMenu("Go") {
             Group {
             Button("Previous Page") { reader?.model.pageBackward() }
@@ -176,6 +182,9 @@ struct ReaderCommands: Commands {
                 KindleSender.sendOnMac(book) { DeviceTransfers.shared.status = $0 }
             }
             .disabled(!(reader.map { KindleSender.supports($0.model.book.url) } ?? false))
+            if TaskerSender.isAvailable {
+                Button("Send to Tasker") { reader.map { TaskerSender.send($0.model) } }
+            }
             Divider()
             Button("Show Assistant") { reader?.toggleAssistant() }
                 .keyboardShortcut("a", modifiers: [.command, .option])
