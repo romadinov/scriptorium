@@ -274,6 +274,8 @@ final class LibraryStore {
 
     /// Highlight to scroll to once the book opened by a deep link has loaded.
     var pendingHighlight: UUID?
+    /// Passage to land on once the book opened by a deep link has loaded (with the page it's near).
+    var pendingQuote: (quote: TextQuote, page: Int)?
     /// Shown when a deep link names a book that isn't on this device.
     var missingBookMessage: String?
 
@@ -284,6 +286,7 @@ final class LibraryStore {
             return
         }
         pendingHighlight = link.highlightID
+        pendingQuote = link.quote.map { ($0, link.page) }
         open(book, page: link.page, progress: link.progress)
     }
 

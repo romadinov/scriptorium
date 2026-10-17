@@ -699,6 +699,28 @@ final class ReaderFlowTests: XCTestCase {
             .waitForExistence(timeout: 10), "No Inbox confirmation")
     }
 
+    /// A link with a quote lands on the passage and selects it. The links (with the seeded books' fingerprints)
+    /// come from the host via TEST_RUNNER_QUOTE_LINK_PDF / _EPUB; skipped without them.
+    func testQuoteLinksLandOnThePassage() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let pdf = env["QUOTE_LINK_PDF"].flatMap(URL.init(string:)),
+              let epub = env["QUOTE_LINK_EPUB"].flatMap(URL.init(string:)) else { throw XCTSkip("No quote links given") }
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10))
+        app.open(pdf)
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Highlight"].waitForExistence(timeout: 10), "PDF passage not selected")
+        XCTAssertEqual(indicator.label, "Page 2 of 3")
+        snap("quote-1-pdf")
+
+        app.open(epub)
+        XCTAssertTrue(app.navigationBars["Pride and Prejudice"].waitForExistence(timeout: 15) ||
+                      app.staticTexts["Pride and Prejudice"].waitForExistence(timeout: 1))
+        let selected = app.buttons["Highlight"].waitForExistence(timeout: 12)
+        snap("quote-2-epub")
+        XCTAssertTrue(selected, "EPUB passage not selected")
+    }
+
     /// iPhone simulator with Tasker installed: More › Send to Tasker hands the page link to Tasker,
     /// and Share Link to Page is offered.
     func testSendToTasker() throws {

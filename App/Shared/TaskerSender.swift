@@ -28,6 +28,16 @@ enum TaskerSender {
         #endif
     }
 
+    /// A link inside the book (web, or to another place in it) → Tasker, noting where it was found.
+    static func sendLink(_ url: URL, title: String?, from model: ReaderModel) {
+        guard let add = model.taskerLink(for: url, title: title) else { return }
+        #if os(iOS)
+        UIApplication.shared.open(add)
+        #else
+        NSWorkspace.shared.open(add)
+        #endif
+    }
+
     #if os(macOS)
     /// Edit › Copy Link (⌃⌘C): link, title and text in one pasteboard write. Tasker's Clip hotkey sends ⌃⌘C
     /// to Scriptorium and reads public.url, public.url-name and the plain text.

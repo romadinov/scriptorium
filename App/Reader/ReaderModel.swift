@@ -31,7 +31,10 @@ final class ReaderModel {
     var selection = "" {
         // The assistant keeps the last selection as the subject of questions: tapping into the question
         // field takes focus from the book and clears the on-page selection, but the question is still about it.
-        didSet { if !selection.isEmpty { questionSelection = selection } }
+        didSet {
+            if !selection.isEmpty { questionSelection = selection }
+            if selection != oldValue { refreshSelectionAnchor() }
+        }
     }
     /// What the assistant's questions are about, until cleared or replaced by a new selection.
     var questionSelection = ""
@@ -474,6 +477,64 @@ final class ReaderModel {
         }
     }
 
+    /// Where the current selection is, as a quote with context, so links land on the passage itself.
+    @ObservationIgnored private(set) var selectionAnchor: (selection: String, page: Int, quote: TextQuote)?
+    @ObservationIgnored private var anchorTask: Task<Void, Never>?
+    /// Finds and selects a quoted passage near `page` (the viewers set it); false if it isn't found.
+    @ObservationIgnored var findQuote: (@MainActor (TextQuote, Int) async -> Bool)?
+
+    private func refreshSelectionAnchor() {
+        anchorTask?.cancel()
+        let selected = selection
+        guard !selected.isEmpty else { selectionAnchor = nil; return }
+        anchorTask = Task { [weak self] in
+            guard (try? await Task.sleep(for: .milliseconds(300))) != nil, let self,
+                  let (location, text) = await self.captureSelection?() else { return }
+            let anchor: (Int, TextQuote)?
+            switch location {
+            case .text(let chapter, _, _, let prefix, let suffix):
+                anchor = (chapter, TextQuote(selection: text, in: prefix + text + suffix))
+            case .pdf(let rects):
+                let page = rects.first?.page ?? self.currentPage
+                anchor = (page, await self.quote(text, onPage: page))
+            case .image(let page, _):
+                anchor = (page, await self.quote(text, onPage: page))
+            }
+            guard !Task.isCancelled, self.selection == selected, let anchor else { return }
+            self.selectionAnchor = (selected, anchor.0, anchor.1)
+        }
+    }
+
+    private func quote(_ selected: String, onPage page: Int) async -> TextQuote {
+        let pageText = (try? await text.text(page: page, allowOCR: false))?.plainText ?? ""
+        return TextQuote(selection: selected, in: pageText)
+    }
+
+    /// Lands on a quoted passage (from a link): the viewer finds and selects it; else just its page.
+    func reveal(_ quote: TextQuote, page: Int) async {
+        // The viewer may still be laying out (web views load chapters asynchronously): retry for a few seconds.
+        for _ in 0..<10 {
+            if let findQuote, await findQuote(quote, page) { return }
+            guard (try? await Task.sleep(for: .milliseconds(500))) != nil else { return }
+        }
+        go(to: page)
+    }
+
+    /// What "Send Link to Tasker" stores for a link in the book: web links as they are; links within the
+    /// book as a Scriptorium link to their target chapter.
+    func taskerLink(for url: URL, title: String?) -> URL? {
+        guard let here = readingLink(), let documentID else { return nil }
+        let note = "From \(here.title)\n\(here.url.absoluteString)"
+        if url.isFileURL || url.scheme == "applewebdata" {
+            guard let chapter = reflowable?.chapterIndex(for: url) else { return nil }
+            let target = DeepLink(documentID: documentID, page: chapter).url
+            let name = title ?? reflowable.flatMap { $0.chapterTitles.indices.contains(chapter) ? $0.chapterTitles[chapter] : nil }
+            return TaskerLink.add(title: ReadingLocationTitle.make(book: book.title, page: chapter, chapterTitle: name),
+                                  url: target, note: note)
+        }
+        return TaskerLink.add(title: title ?? url.host() ?? url.absoluteString, url: url, note: note)
+    }
+
     /// A link to where the reader is (or to `highlight`), titled "Book — p. N" / "Book — Chapter", for Tasker,
     /// the share sheet and Copy Link. Nil until the book's fingerprint is known.
     func readingLink(highlight: Highlight? = nil) -> (url: URL, title: String, text: String)? {
@@ -482,9 +543,12 @@ final class ReaderModel {
         let highlight = highlight ?? (selection.isEmpty ? nil : highlights.first {
             $0.text == selection && $0.location.pageIndex == currentPage
         })
-        let page = highlight?.location.pageIndex ?? currentPage
-        let link = DeepLink(documentID: documentID, page: page, progress: highlight == nil ? pageProgress : 0,
-                            highlightID: highlight?.id)
+        // A plain selection links to the passage itself (quote + context), found again on open.
+        let anchor = highlight == nil ? selectionAnchor.flatMap { $0.selection == selection ? $0 : nil } : nil
+        let page = highlight?.location.pageIndex ?? anchor?.page ?? currentPage
+        let progress = highlight != nil || (anchor != nil && (reflowable == nil || page != currentPage)) ? 0 : pageProgress
+        let link = DeepLink(documentID: documentID, page: page, progress: progress,
+                            highlightID: highlight?.id, quote: anchor?.quote)
         let chapter = reflowable.flatMap { $0.chapterTitles.indices.contains(page) ? $0.chapterTitles[page] : "Chapter \(page + 1)" }
         let title = ReadingLocationTitle.make(book: book.title, page: page, chapterTitle: chapter)
         let text = [highlight?.text ?? selection, highlight?.note ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n")

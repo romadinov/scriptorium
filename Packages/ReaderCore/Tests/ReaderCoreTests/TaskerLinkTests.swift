@@ -26,4 +26,32 @@ import Testing
         #expect(ReadingLocationTitle.make(book: "Thermodynamics", page: 41, chapterTitle: nil) == "Thermodynamics — p. 42")
         #expect(ReadingLocationTitle.make(book: "Pride", page: 3, chapterTitle: "Chapter 4") == "Pride — Chapter 4")
     }
+
+    @Test func deepLinkCarriesAQuoteRoundTrip() throws {
+        let quote = TextQuote(exact: "a = b & c + d #1?", prefix: "Since ", suffix: ", we have")
+        let link = DeepLink(documentID: "abc", page: 3, progress: 0.5, quote: quote)
+        #expect(!link.url.absoluteString.contains("&c") && !link.url.absoluteString.contains("#"))
+        #expect(DeepLink(url: link.url) == link)
+        // And through Tasker, which encodes the whole link again.
+        let tasker = TaskerLink.add(title: "T", url: link.url)
+        let inner = try #require(URLComponents(url: tasker, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "url" }?.value)
+        #expect(DeepLink(url: URL(string: inner)!) == link)
+    }
+
+    @Test func quoteTakesContextAndFindsTheRightOccurrence() throws {
+        let page = "The cat sat.\nThen the  cat ran away, and the cat slept."
+        let quote = TextQuote(selection: "the cat", in: "Then the cat ran away, and the cat slept.")
+        #expect(quote.prefix == "Then " && quote.suffix.hasPrefix(" ran away"))
+        let range = try #require(quote.locate(in: page))
+        #expect(page[range] == "the  cat")                           // original spacing, second line
+        #expect(page[range.upperBound...].hasPrefix(" ran away"))
+        let last = TextQuote(exact: "the cat", prefix: "and ", suffix: " slept")
+        #expect(page[try #require(last.locate(in: page)).upperBound...].hasPrefix(" slept"))
+        #expect(TextQuote(exact: "dog").locate(in: page) == nil)
+    }
+
+    @Test func longSelectionsAreCapped() {
+        let long = String(repeating: "word ", count: 100)
+        #expect(TextQuote(selection: long, in: long).exact.count == TextQuote.maxLength)
+    }
 }

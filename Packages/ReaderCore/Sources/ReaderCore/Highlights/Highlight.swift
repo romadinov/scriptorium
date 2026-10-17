@@ -215,16 +215,20 @@ public struct BookHighlights: Codable, Sendable, Equatable {
 /// `scriptorium://open?doc=<fingerprint>&page=<n>&progress=<0…1>&highlight=<uuid>` — opens a book at a place.
 public struct DeepLink: Equatable, Sendable {
     public static let scheme = "scriptorium"
+    static let valueCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
     public var documentID: String
     public var page: Int
     public var progress: Double
     public var highlightID: UUID?
+    /// The selected passage, to land on exactly (page/progress only find the neighbourhood).
+    public var quote: TextQuote?
 
-    public init(documentID: String, page: Int, progress: Double = 0, highlightID: UUID? = nil) {
+    public init(documentID: String, page: Int, progress: Double = 0, highlightID: UUID? = nil, quote: TextQuote? = nil) {
         self.documentID = documentID
         self.page = page
         self.progress = progress
         self.highlightID = highlightID
+        self.quote = quote
     }
 
     public init?(url: URL) {
@@ -236,6 +240,7 @@ public struct DeepLink: Equatable, Sendable {
         page = value("page").flatMap(Int.init) ?? 0
         progress = value("progress").flatMap(Double.init) ?? 0
         highlightID = value("highlight").flatMap(UUID.init(uuidString:))
+        quote = value("quote").flatMap { $0.isEmpty ? nil : TextQuote(exact: $0, prefix: value("prefix") ?? "", suffix: value("suffix") ?? "") }
     }
 
     public var url: URL {
@@ -245,6 +250,15 @@ public struct DeepLink: Equatable, Sendable {
         c.queryItems = [URLQueryItem(name: "doc", value: documentID), URLQueryItem(name: "page", value: String(page))]
         if progress > 0 { c.queryItems?.append(URLQueryItem(name: "progress", value: String(format: "%.4f", progress))) }
         if let highlightID { c.queryItems?.append(URLQueryItem(name: "highlight", value: highlightID.uuidString)) }
+        if let quote {
+            c.queryItems? += [URLQueryItem(name: "quote", value: quote.exact)]
+            if !quote.prefix.isEmpty { c.queryItems?.append(URLQueryItem(name: "prefix", value: quote.prefix)) }
+            if !quote.suffix.isEmpty { c.queryItems?.append(URLQueryItem(name: "suffix", value: quote.suffix)) }
+        }
+        // Encode values strictly: quotes contain &, =, + and # that URLComponents would leave literal.
+        c.percentEncodedQueryItems = c.queryItems?.map {
+            URLQueryItem(name: $0.name, value: $0.value?.addingPercentEncoding(withAllowedCharacters: Self.valueCharacters))
+        }
         return c.url!
     }
 }

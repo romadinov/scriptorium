@@ -290,6 +290,7 @@ struct MacLibraryView: View {
                 Task {
                     guard let book = await library.locate(documentID: link.documentID, pathHint: nil) else { return }
                     library.pendingHighlight = link.highlightID
+                    library.pendingQuote = link.quote.map { ($0, link.page) }
                     open(book, page: link.page, progress: link.progress)
                 }
             } else if url.isFileURL {

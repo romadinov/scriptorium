@@ -31,8 +31,14 @@ struct ReaderScreen: View {
             }
         }
         .task(id: model == nil) {
-            // Arrived through a highlight link: show it once the viewer has laid out.
-            guard let model, let id = library.pendingHighlight,
+            // Arrived through a highlight or passage link: show it once the viewer has laid out.
+            guard let model else { return }
+            if let pending = library.pendingQuote {
+                library.pendingQuote = nil
+                try? await Task.sleep(for: .seconds(1))
+                await model.reveal(pending.quote, page: pending.page)
+            }
+            guard let id = library.pendingHighlight,
                   let highlight = model.highlights.first(where: { $0.id == id }) else { return }
             library.pendingHighlight = nil
             try? await Task.sleep(for: .seconds(1))

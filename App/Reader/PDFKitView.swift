@@ -194,6 +194,19 @@ extension PDFKitView {
                       let page = view.document?.page(at: first.page) else { return }
                 view.go(to: first.rect.insetBy(dx: 0, dy: -80), on: page)
             }
+            model.findQuote = { [weak view] quote, near in
+                // The linked page first, then its neighbours (page breaks may differ between editions/OCR).
+                guard let view, let document = view.document else { return false }
+                for index in [near, near + 1, near - 1] where index >= 0 && index < document.pageCount {
+                    guard let page = document.page(at: index), let text = page.string,
+                          let range = quote.locate(in: text), let selection = page.selection(for: NSRange(range, in: text))
+                    else { continue }
+                    view.setCurrentSelection(selection, animate: true)
+                    view.go(to: selection)
+                    return true
+                }
+                return false
+            }
         }
 
         func sync(highlights: [Highlight]) {
@@ -227,6 +240,7 @@ extension PDFKitView {
             model.captureSelection = nil
             model.clearSelection = nil
             model.revealHighlight = nil
+            model.findQuote = nil
         }
     }
 }
@@ -264,7 +278,11 @@ extension PDFKitView.Coordinator: UIContextMenuInteractionDelegate, UIGestureRec
                     },
                     UIAction(title: "Open", image: UIImage(systemName: "safari")) { _ in UIApplication.shared.open(url) },
                     UIAction(title: "Copy Link", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.url = url },
-                ])
+                ] + (TaskerSender.isAvailable ? [
+                    UIAction(title: "Send Link to Tasker", image: UIImage(systemName: "checklist")) { _ in
+                        TaskerSender.sendLink(url, title: title, from: model)
+                    },
+                ] : []))
             }
         }
 

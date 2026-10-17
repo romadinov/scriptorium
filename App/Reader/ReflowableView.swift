@@ -201,6 +201,15 @@ extension ReflowableView {
                     self.call("reader.reveal(id)", ["id": highlight.id.uuidString])
                 }
             }
+            model.findQuote = { [weak self] quote, chapter in
+                guard let self else { return false }
+                if !(await self.isLoaded(chapter)) { await self.replace(with: chapter, progress: 0) }
+                let found = try? await self.webView?.callAsyncJavaScript(
+                    "return reader.revealQuote(chapter, exact, prefix, suffix)",
+                    arguments: ["chapter": chapter, "exact": quote.exact, "prefix": quote.prefix, "suffix": quote.suffix],
+                    contentWorld: .page) as? Bool
+                return found == true
+            }
         }
 
         func uninstall() {
@@ -214,6 +223,7 @@ extension ReflowableView {
             model.captureSelection = nil
             model.clearSelection = nil
             model.revealHighlight = nil
+            model.findQuote = nil
         }
 
         // MARK: Loading
@@ -361,6 +371,11 @@ extension ReflowableView {
                     if external {
                         actions.append(UIAction(title: "Copy Link", image: UIImage(systemName: "doc.on.doc")) { _ in
                             UIPasteboard.general.url = url
+                        })
+                    }
+                    if TaskerSender.isAvailable, let model = self?.model {
+                        actions.append(UIAction(title: "Send Link to Tasker", image: UIImage(systemName: "checklist")) { _ in
+                            TaskerSender.sendLink(url, title: title, from: model)
                         })
                     }
                     return UIMenu(title: title ?? url.absoluteString, children: actions)

@@ -42,6 +42,10 @@ struct MacReaderView: View {
                 library.pendingHighlight = nil
                 model.reveal(highlight)
             }
+            if let pending = library.pendingQuote {
+                library.pendingQuote = nil
+                await model.reveal(pending.quote, page: pending.page)
+            }
             await model.checkRemotePosition(localSavedAt: library.lastPositionDate(book))
         }
         .onChange(of: model?.currentPage) { _, page in
@@ -291,6 +295,9 @@ struct MacReaderContent: View {
         }
         if let link, !link.isFileURL {
             items.append(MenuAction("Add Link to Read Later", symbol: "text.badge.plus") { model.addToReadLater(url: link, title: nil) })
+        }
+        if let link, TaskerSender.isAvailable {
+            items.append(MenuAction("Send Link to Tasker", symbol: "checklist") { TaskerSender.sendLink(link, title: nil, from: model) })
         }
         guard !items.isEmpty else { return }
         items.append(.separator())

@@ -491,6 +491,30 @@
     for (const index of loaded) applyHighlights(index);
   };
 
+  // A passage from a link: the occurrence of `exact` whose context matches best; selected and scrolled to.
+  R.revealQuote = (chapter, exact, prefix, suffix) => {
+    const sec = section(chapter);
+    if (!sec || !exact) return false;
+    const full = textNodes(sec).text;
+    const overlap = (a, b) => { let n = 0; while (n < a.length && n < b.length && a[n] === b[n]) n++; return n; };
+    const rev = (s) => [...s].reverse().join('');
+    let best = -1, bestScore = -1;
+    for (let i = full.indexOf(exact); i >= 0; i = full.indexOf(exact, i + 1)) {
+      const score = overlap(rev(full.slice(Math.max(0, i - prefix.length), i)), rev(prefix))
+        + overlap(full.slice(i + exact.length, i + exact.length + suffix.length), suffix);
+      if (score > bestScore) { best = i; bestScore = score; }
+    }
+    if (best < 0) return false;
+    const range = rangeIn(sec, best, best + exact.length);
+    if (!range) return false;
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    scrollToRect(range.getBoundingClientRect(), false);
+    requestAnimationFrame(() => { recordAnchor(); report(); });
+    return true;
+  };
+
   R.reveal = (id) => {
     const mark = book().querySelector(`mark.rhl[data-hl="${id}"]`);
     if (!mark) return false;
