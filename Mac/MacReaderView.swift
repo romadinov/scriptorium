@@ -10,11 +10,16 @@ struct MacReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ReaderModel?
     @State private var openError: String?
+    /// PDF/DjVu shown as reflowable text (remembered per book).
+    @State private var asText: Bool?
 
     var body: some View {
         Group {
             if let model {
-                MacReaderContent(model: model)
+                MacReaderContent(model: model) { on in
+                    ReaderModel.setViewsAsText(on, for: book)
+                    asText = on
+                }
             } else if let openError {
                 ContentUnavailableView("Can't Open This Book", systemImage: "exclamationmark.triangle", description: Text(openError))
             } else {
@@ -23,14 +28,18 @@ struct MacReaderView: View {
         }
         .navigationTitle(book.title)
         .navigationSubtitle(model.map { m in
-            ["\(m.currentPosition.label)", book.format, m.timeLeftText].compactMap { $0 }.joined(separator: " · ")
+            ["\(m.currentPosition.label)", book.format, m.timeLeftText,
+             m.textConversion.map { "Converting to text \(Int($0 * 100))%" }].compactMap { $0 }.joined(separator: " · ")
         } ?? book.format)
-        .task(id: book.url) {
+        .task(id: "\(book.url.path)|\(asText ?? ReaderModel.viewsAsText(book))") {
             do {
+                model?.stopTextConversion()
                 model = try await ReaderModel.load(book: book, startPage: library.lastPage(book),
                                                    startProgress: library.lastProgress(book),
                                                    ocrLanguages: settings.ocrLanguages,
-                                                   highlightStore: HighlightStore.shared)
+                                                   highlightStore: HighlightStore.shared,
+                                                   asText: asText ?? ReaderModel.viewsAsText(book))
+                model?.convertToText()
             } catch {
                 openError = error.localizedDescription
             }
@@ -65,6 +74,8 @@ struct MacReaderView: View {
 
 struct MacReaderContent: View {
     @Bindable var model: ReaderModel
+    /// Switch a PDF/DjVu between its pages and the converted text.
+    var onViewAsText: (Bool) -> Void = { _ in }
     @Environment(SettingsStore.self) private var settings
     @Environment(DeviceTransfers.self) private var transfers
     @State private var showAssistant = false
@@ -211,9 +222,15 @@ struct MacReaderContent: View {
                     Button("Bigger") { fontScale = min(2.0, fontScale + 0.1) }.keyboardShortcut("+")
                     Button("Smaller") { fontScale = max(0.7, fontScale - 0.1) }.keyboardShortcut("-")
                     Button("Actual Size") { fontScale = 1.0 }.keyboardShortcut("0")
+                    if model.isViewingAsText {
+                        Divider()
+                        Button("View Original Pages") { onViewAsText(false) }
+                    }
                 }
             } else if model.pdfDocument != nil {
                 Menu("View", systemImage: "rectangle.split.2x1") {
+                    Button("View as Text") { onViewAsText(true) }
+                    Divider()
                     Toggle("Two Pages", isOn: $twoPages)
                     Toggle("Live Text Mode (for scans)", isOn: $model.imageMode)
                     Divider()
@@ -222,6 +239,7 @@ struct MacReaderContent: View {
                 }
             } else {
                 Menu("Text", systemImage: "text.viewfinder") {
+                    if model.canViewAsText { Button("View as Text") { onViewAsText(true) }; Divider() }
                     Button("Recognize Text on This Page") { model.recognizeCurrentPage() }
                     Button("Recognize Whole Document") { model.recognizeDocument() }
                 }

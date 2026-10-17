@@ -699,6 +699,30 @@ final class ReaderFlowTests: XCTestCase {
             .waitForExistence(timeout: 10), "No Inbox confirmation")
     }
 
+    /// PDF and DjVu "View as Text": pages become reflowable text (illustrations/formulas as images), and back.
+    func testViewPDFAndDjVuAsText() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .phone, "iPad layout")
+        for name in ["Thermodynamics, PDF", "Thermodynamics, DJVU"] {
+            openFolder("Physics")
+            open(bookMatching: name)
+            XCTAssertTrue(app.buttons["Text"].waitForExistence(timeout: 15))
+            sleep(1)
+            app.buttons["Text"].tap()
+            XCTAssertTrue(app.buttons["View as Text"].waitForExistence(timeout: 5), "No View as Text for \(name)")
+            app.buttons["View as Text"].tap()
+            let text = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'entropy'")).firstMatch
+            XCTAssertTrue(text.waitForExistence(timeout: 40), "\(name): no converted text")
+            sleep(3)
+            snap("astext-\(name.hasSuffix("PDF") ? "pdf" : "djvu")")
+            app.buttons["Text Size & Layout"].tap()
+            XCTAssertTrue(app.buttons["View Original Pages"].waitForExistence(timeout: 5))
+            app.buttons["View Original Pages"].tap()
+            XCTAssertTrue(app.buttons["Text"].waitForExistence(timeout: 15), "\(name): didn't return to pages")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+    }
+
     /// Text size: in the toolbar's Text Size & Layout menu (iPad) or More (iPhone); tapping Larger enlarges the text.
     func testTextSizeControls() throws {
         openFolder("Fiction")

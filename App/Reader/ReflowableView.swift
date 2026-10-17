@@ -201,6 +201,13 @@ extension ReflowableView {
                     self.call("reader.reveal(id)", ["id": highlight.id.uuidString])
                 }
             }
+            model.reloadChapter = { [weak self] chapter in
+                guard let self else { return }
+                Task {
+                    guard await self.isLoaded(chapter) else { return }
+                    await self.replace(with: chapter, progress: self.model.currentPage == chapter ? self.model.pageProgress : 0)
+                }
+            }
             model.findQuote = { [weak self] quote, chapter in
                 guard let self else { return false }
                 if !(await self.isLoaded(chapter)) { await self.replace(with: chapter, progress: 0) }
@@ -224,6 +231,7 @@ extension ReflowableView {
             model.clearSelection = nil
             model.revealHighlight = nil
             model.findQuote = nil
+            model.reloadChapter = nil
         }
 
         // MARK: Loading

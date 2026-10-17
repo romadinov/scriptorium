@@ -9,23 +9,31 @@ struct ReaderScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ReaderModel?
     @State private var openError: String?
+    /// PDF/DjVu shown as reflowable text (remembered per book).
+    @State private var asText: Bool?
 
     var body: some View {
         Group {
             if let model {
-                ReaderContent(model: model)
+                ReaderContent(model: model) { on in
+                    ReaderModel.setViewsAsText(on, for: book)
+                    asText = on
+                }
             } else if let openError {
                 ContentUnavailableView("Can't open \(book.title)", systemImage: "exclamationmark.triangle", description: Text(openError))
             } else {
                 ProgressView()
             }
         }
-        .task(id: book.url) {
+        .task(id: "\(book.url.path)|\(asText ?? ReaderModel.viewsAsText(book))") {
             do {
+                model?.stopTextConversion()
                 model = try await ReaderModel.load(book: book, startPage: library.lastPage(book),
                                                    startProgress: library.lastProgress(book),
                                                    ocrLanguages: settings.ocrLanguages,
-                                                   highlightStore: HighlightStore.shared)
+                                                   highlightStore: HighlightStore.shared,
+                                                   asText: asText ?? ReaderModel.viewsAsText(book))
+                model?.convertToText()
             } catch {
                 openError = error.localizedDescription
             }
@@ -70,6 +78,8 @@ struct ReaderScreen: View {
 
 private struct ReaderContent: View {
     @Bindable var model: ReaderModel
+    /// Switch a PDF/DjVu between its pages and the converted text.
+    var onViewAsText: (Bool) -> Void = { _ in }
     @Environment(SettingsStore.self) private var settings
     @Environment(DeviceTransfers.self) private var transfers
     @State private var showAssistant = false
@@ -100,6 +110,9 @@ private struct ReaderContent: View {
                 }
                 if let progress = model.ocrProgress {
                     OCRProgressPill(progress: progress) { model.cancelRecognition() }
+                }
+                if let progress = model.textConversion {
+                    OCRProgressPill(progress: progress, title: "Converting to text") { model.stopTextConversion() }
                 }
                 if model.readAloud.state != .idle {
                     ReadAloudBar(readAloud: model.readAloud)
@@ -247,6 +260,9 @@ private struct ReaderContent: View {
             if model.reflowable != nil {
                 Menu("Text Size & Layout", systemImage: "textformat.size") {
                     TextSizeControls(fontScale: $fontScale)
+                    if model.isViewingAsText {
+                        Button("View Original Pages", systemImage: "doc.richtext") { onViewAsText(false) }
+                    }
                     if !(model.source is WebArchiveSource) {
                         Picker("Layout", selection: $layout) {
                             ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
@@ -260,6 +276,10 @@ private struct ReaderContent: View {
                     }
                 }
                 Menu("Text", systemImage: "text.viewfinder") {
+                    if model.canViewAsText {
+                        Button("View as Text", systemImage: "text.justify.left") { onViewAsText(true) }
+                        Divider()
+                    }
                     Button("Recognize text on this page", systemImage: "doc.text.viewfinder") { model.recognizeCurrentPage() }
                     Button("Recognize whole document", systemImage: "doc.on.doc") { model.recognizeDocument() }
                     if model.pdfDocument != nil {
@@ -381,6 +401,9 @@ private struct ReaderContent: View {
                     }
                 }
                 if model.reflowable != nil {
+                    if model.isViewingAsText {
+                        Button("View Original Pages", systemImage: "doc.richtext") { onViewAsText(false) }
+                    }
                     if !(model.source is WebArchiveSource) {
                         Picker("Layout", selection: $layout) {
                             ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
@@ -392,6 +415,9 @@ private struct ReaderContent: View {
                         ForEach(PageTurning.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                     }
                     Section("Text recognition") {
+                        if model.canViewAsText {
+                            Button("View as Text", systemImage: "text.justify.left") { onViewAsText(true) }
+                        }
                         Button("Recognize text on this page", systemImage: "doc.text.viewfinder") { model.recognizeCurrentPage() }
                         Button("Recognize whole document", systemImage: "doc.on.doc") { model.recognizeDocument() }
                         if model.pdfDocument != nil {
@@ -782,12 +808,13 @@ private struct StatusPill: View {
 
 private struct OCRProgressPill: View {
     let progress: Double
+    var title = "Recognizing"
     let onCancel: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
             ProgressView(value: progress).frame(width: 160)
-            Text("Recognizing \(Int(progress * 100))%").font(.callout).monospacedDigit()
+            Text("\(title) \(Int(progress * 100))%").font(.callout).monospacedDigit()
             Button("Stop", action: onCancel).buttonStyle(.borderless)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)

@@ -172,10 +172,12 @@ final class ReaderModel {
 
     /// Opening can be slow (EPUB extraction, FB2 conversion, DjVu index), so it runs off the main actor.
     static func load(book: Book, startPage: Int, startProgress: Double, ocrLanguages: [String],
-                     highlightStore: HighlightStore) async throws -> ReaderModel {
+                     highlightStore: HighlightStore, asText: Bool = false) async throws -> ReaderModel {
         let url = book.url
         try await WordDocConverter.convertIfNeeded(url)   // .doc: one-time conversion with WebKit
-        let source = try await Task.detached(priority: .userInitiated) { try DocumentOpener.open(url) }.value
+        var source = try await Task.detached(priority: .userInitiated) { try DocumentOpener.open(url) }.value
+        // PDF/DjVu "View as Text": the same pages, converted to reflowable text (one chapter per page).
+        if asText, source is PDFPageSource || source is DjVuPageSource { source = ReflowedSource(original: source) }
         let model = ReaderModel(book: book, source: source, startPage: startPage, ocrLanguages: ocrLanguages,
                                 highlightStore: highlightStore)
         model.startProgress = startProgress
@@ -189,9 +191,49 @@ final class ReaderModel {
         self.source = source
         self.highlightStore = highlightStore
         text = TextProvider(source: source, ocr: OCRService(languages: ocrLanguages))
+        self.ocrLanguages = ocrLanguages
         currentPage = min(max(0, startPage), max(0, source.pageCount - 1))
-        imageMode = book.isDjVu || Self.looksScanned(source)
+        imageMode = !(source is ReflowedSource) && (book.isDjVu || Self.looksScanned(source))
         installFixedLayoutSpeech()
+    }
+
+    // MARK: View as Text (PDF/DjVu converted to reflowable text)
+
+    /// "View as Text" is remembered per book.
+    static func viewsAsText(_ book: Book) -> Bool { UserDefaults.standard.bool(forKey: "asText:" + book.url.lastPathComponent) }
+    static func setViewsAsText(_ on: Bool, for book: Book) { UserDefaults.standard.set(on, forKey: "asText:" + book.url.lastPathComponent) }
+
+    @ObservationIgnored private let ocrLanguages: [String]
+    var canViewAsText: Bool { source is PDFPageSource || source is DjVuPageSource }
+    var isViewingAsText: Bool { source is ReflowedSource }
+    /// Converting pages to text: fraction done, nil when idle.
+    var textConversion: Double?
+    @ObservationIgnored private var conversionTask: Task<Void, Never>?
+    /// Reloads a chapter whose placeholder is showing once its page has been converted (set by the viewer).
+    @ObservationIgnored var reloadChapter: (@MainActor (Int) -> Void)?
+
+    /// Converts the remaining pages, from the current one on; the page being read is redrawn when ready.
+    func convertToText() {
+        guard let reflowed = source as? ReflowedSource, conversionTask == nil, reflowed.convertedCount < reflowed.pageCount else { return }
+        let languages = ocrLanguages
+        textConversion = Double(reflowed.convertedCount) / Double(max(1, reflowed.pageCount))
+        conversionTask = Task { [weak self] in
+            do {
+                try await reflowed.convert(from: self?.currentPage ?? 0, languages: languages) { fraction, page in
+                    await MainActor.run {
+                        guard let self else { return }
+                        self.textConversion = fraction
+                        if abs(page - self.currentPage) <= 1 { self.reloadChapter?(page) }
+                    }
+                }
+            } catch {}
+            self?.textConversion = nil
+            self?.conversionTask = nil
+        }
+    }
+
+    func stopTextConversion() {
+        conversionTask?.cancel()
     }
 
     /// A PDF whose first pages have no text layer is almost certainly a scan.
