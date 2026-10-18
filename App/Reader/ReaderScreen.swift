@@ -129,7 +129,7 @@ private struct ReaderContent: View {
                         onTranslate: { showTranslation = true },
                         onHighlight: { color in Task { await model.addHighlight(color: color) } },
                         onNote: { Task { await model.annotateSelection() } },
-                        onThroughline: ThroughlineSender.isAvailable ? { ThroughlineSender.send(model) } : nil)
+                        onTaskApp: TaskAppSender.isAvailable ? { TaskAppSender.send(model) } : nil)
                 }
             }
             .padding(.bottom, 20)
@@ -198,8 +198,8 @@ private struct ReaderContent: View {
                 showAssistant = true
                 model.ask("", action: .explain, settings: settings)
             }
-            if ThroughlineSender.isAvailable {
-                Button("Send to Throughline") { ThroughlineSender.send(model, highlight: highlight) }
+            if TaskAppSender.isAvailable {
+                Button("Send to \(TaskAppLink.appName)") { TaskAppSender.send(model, highlight: highlight) }
             }
             Button("Remove highlight", role: .destructive) { Task { await model.removeHighlight(highlight) } }
         } message: { highlight in
@@ -616,7 +616,7 @@ struct DictionaryTerm: Identifiable {
     var id: String { text }
 }
 
-/// Share a link to this page (title + deep link, so Throughline's share extension can capture it) and Send to Throughline.
+/// Share a link to this page (title + deep link, so the task app's share extension can capture it) and Send to the task app.
 private struct ReadingLinkActions: View {
     let model: ReaderModel
 
@@ -626,8 +626,8 @@ private struct ReadingLinkActions: View {
                       preview: SharePreview(link.title)) {
                 Label("Share Link to Page", systemImage: "link")
             }
-            if ThroughlineSender.isAvailable {
-                Button("Send to Throughline", systemImage: "checklist") { ThroughlineSender.send(model) }
+            if TaskAppSender.isAvailable {
+                Button("Send to \(TaskAppLink.appName)", systemImage: "checklist") { TaskAppSender.send(model) }
             }
         }
     }
@@ -657,8 +657,8 @@ private struct SelectionBar: View {
     let onTranslate: () -> Void
     let onHighlight: (Highlight.Color) -> Void
     let onNote: () -> Void
-    /// Nil when Throughline isn't installed.
-    let onThroughline: (() -> Void)?
+    /// Nil when the task app isn't installed.
+    let onTaskApp: (() -> Void)?
 
     private var isShort: Bool { selection.split(whereSeparator: \.isWhitespace).count <= 3 }
 
@@ -693,8 +693,8 @@ private struct SelectionBar: View {
             bar("Apple Translate", "globe", showTitles, action: onTranslate)
             Divider().frame(height: 24)
             bar("Ask…", "sparkles", showTitles, action: onAsk)
-            if let onThroughline {
-                bar("Send to Throughline", "checklist", showTitles, action: onThroughline)
+            if let onTaskApp {
+                bar("Send to \(TaskAppLink.appName)", "checklist", showTitles, action: onTaskApp)
             }
         }
         .fixedSize()

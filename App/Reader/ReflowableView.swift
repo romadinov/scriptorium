@@ -381,9 +381,9 @@ extension ReflowableView {
                             UIPasteboard.general.url = url
                         })
                     }
-                    if ThroughlineSender.isAvailable, let model = self?.model {
-                        actions.append(UIAction(title: "Send Link to Throughline", image: UIImage(systemName: "checklist")) { _ in
-                            ThroughlineSender.sendLink(url, title: title, from: model)
+                    if TaskAppSender.isAvailable, let model = self?.model {
+                        actions.append(UIAction(title: "Send Link to \(TaskAppLink.appName)", image: UIImage(systemName: "checklist")) { _ in
+                            TaskAppSender.sendLink(url, title: title, from: model)
                         })
                     }
                     return UIMenu(title: title ?? url.absoluteString, children: actions)

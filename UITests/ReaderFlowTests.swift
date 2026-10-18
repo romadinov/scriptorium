@@ -770,9 +770,9 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(selected, "EPUB passage not selected")
     }
 
-    /// iPhone simulator with Throughline installed: More › Send to Throughline hands the page link to Throughline,
+    /// iPhone simulator with the task app installed: More › Send to the task app hands the page link to the task app,
     /// and Share Link to Page is offered.
-    func testSendToThroughline() throws {
+    func testSendToTaskApp() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone only")
         openFolder("Physics")
         open(bookMatching: "Thermodynamics, PDF")
@@ -780,8 +780,8 @@ final class ReaderFlowTests: XCTestCase {
         sleep(1)
         app.buttons["More"].tap()
         XCTAssertTrue(app.buttons["Share Link to Page"].waitForExistence(timeout: 5), "No Share Link to Page")
-        let send = app.buttons["Send to Throughline"]
-        XCTAssertTrue(send.exists, "No Send to Throughline (is Throughline installed on this simulator?)")
+        let send = app.buttons["Send to Uberdoer"]
+        XCTAssertTrue(send.exists, "No Send to the task app (is the task app installed on this simulator?)")
         snap("tasker-1-menu")
         send.tap()
         let tasker = XCUIApplication(bundleIdentifier: "com.romadinov.tasker")
@@ -792,10 +792,10 @@ final class ReaderFlowTests: XCTestCase {
             snap("tasker-2-confirm")
             open.tap()
         }
-        // Scriptorium hands throughline://add to iOS and leaves the foreground. (Throughline itself coming forward is
-        // Throughline's side: its simulator build currently crashes at launch setting up CloudKit.)
+        // Scriptorium hands uberdoer://add to iOS and leaves the foreground. (The task app itself coming forward is
+        // the task app's side: its simulator build currently crashes at launch setting up CloudKit.)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10) || tasker.wait(for: .runningForeground, timeout: 1),
-                      "Scriptorium did not hand off to Throughline")
+                      "Scriptorium did not hand off to the task app")
         sleep(2)
         snap("tasker-2-captured")
     }

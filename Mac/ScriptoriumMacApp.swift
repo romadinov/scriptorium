@@ -113,8 +113,8 @@ struct ReaderCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .pasteboard) {
-            // A link to this page (or the selected highlight); Throughline's Clip hotkey relies on ⌃⌘C.
-            Button("Copy Link") { reader.map { ThroughlineSender.copyLink($0.model) } }
+            // A link to this page (or the selected highlight); the task app's Clip hotkey relies on ⌃⌘C.
+            Button("Copy Link") { reader.map { TaskAppSender.copyLink($0.model) } }
                 .keyboardShortcut("c", modifiers: [.command, .control])
                 .disabled(reader == nil)
         }
@@ -182,8 +182,8 @@ struct ReaderCommands: Commands {
                 KindleSender.sendOnMac(book) { DeviceTransfers.shared.status = $0 }
             }
             .disabled(!(reader.map { KindleSender.supports($0.model.book.url) } ?? false))
-            if ThroughlineSender.isAvailable {
-                Button("Send to Throughline") { reader.map { ThroughlineSender.send($0.model) } }
+            if TaskAppSender.isAvailable {
+                Button("Send to \(TaskAppLink.appName)") { reader.map { TaskAppSender.send($0.model) } }
             }
             Divider()
             Button("Show Assistant") { reader?.toggleAssistant() }
