@@ -12,6 +12,7 @@ cp "$SRC/Thermodynamics.pdf" "$SRC/Thermodynamics.djvu" "$LIB/Physics/"
 cp "$SRC/Scanned.pdf" "$LIB/"
 [ -f "$SRC/Entropy (Wikipedia).webarchive" ] && cp "$SRC/Entropy (Wikipedia).webarchive" "$LIB/"
 [ -f "$SRC/Python 3.10 docs.chm" ] && cp "$SRC/Python 3.10 docs.chm" "$LIB/"
+[ -f "$SRC/Dark Text.webarchive" ] && cp "$SRC/Dark Text.webarchive" "$LIB/"   # hard-coded dark text (dark mode check)
 cp "$SRC/Pride.epub" "$LIB/Fiction/Pride and Prejudice.epub"
 cp "$(dirname "$0")/../Packages/ReaderCore/Tests/ReaderCoreTests/Fixtures/sample.fb2" "$LIB/Fiction/Тепло и порядок.fb2"
 if [ -f "$SRC/Heat and Order.doc" ]; then

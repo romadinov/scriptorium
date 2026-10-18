@@ -699,6 +699,16 @@ final class ReaderFlowTests: XCTestCase {
             .waitForExistence(timeout: 10), "No Inbox confirmation")
     }
 
+    /// A saved web page with hard-coded dark text stays readable in dark mode (screenshot check).
+    func testWebArchiveInDarkMode() throws {
+        let book = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Dark Text'")).firstMatch
+        try XCTSkipUnless(book.waitForExistence(timeout: 5), "Seed 'Dark Text.webarchive' to run this")
+        open(bookMatching: "Dark Text, WEBARCHIVE")
+        XCTAssertTrue(app.webViews.staticTexts["Saved article with dark text"].waitForExistence(timeout: 15))
+        sleep(2)
+        snap("webarchive-dark")
+    }
+
     /// PDF and DjVu "View as Text": pages become reflowable text (illustrations/formulas as images), and back.
     func testViewPDFAndDjVuAsText() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .phone, "iPad layout")

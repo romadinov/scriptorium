@@ -456,6 +456,13 @@ extension ReflowableView {
         :root { color-scheme: light dark; --scale: 1; --cols: 1; --ph: 44px; --pv: 40px;
                 --bg: #fffdf8; --fg: #1d1b18; --link: #2f5fb3; }
         @media (prefers-color-scheme: dark) { :root { --bg: #1c1b1a; --fg: #e9e5dc; --link: #8fb4ff; } }
+        /* Dark mode: books and saved web pages often hard-code dark text (and light boxes); use the reader's
+           colours so nothing ends up dark on dark. Highlights (mark) and images keep theirs. */
+        @media (prefers-color-scheme: dark) {
+          .rchap, .rchap *:not(mark):not(img):not(svg):not(svg *) { color: var(--fg) !important;
+            background-color: transparent !important; border-color: rgba(233, 229, 220, 0.25) !important; }
+          html .rchap a[href], html .rchap a[href] *:not(img) { color: var(--link) !important; }
+        }
         @media (max-width: 560px) { :root { --ph: 20px; --pv: 22px; } html { font-size: calc(18px * var(--scale)) !important; }
                                     html.scroll .rchap { padding: 18px 18px 8px; } }
         html { -webkit-text-size-adjust: none; font-size: calc(20px * var(--scale)) !important; background: var(--bg) !important; }
