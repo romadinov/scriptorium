@@ -124,8 +124,8 @@ struct MacReaderContent: View {
                 showAssistant = true
                 model.ask("", action: .explain, settings: settings)
             }
-            if TaskerSender.isAvailable {
-                Button("Send to Tasker") { TaskerSender.send(model, highlight: highlight) }
+            if ThroughlineSender.isAvailable {
+                Button("Send to Throughline") { ThroughlineSender.send(model, highlight: highlight) }
             }
             Button("Remove Highlight", role: .destructive) { Task { await model.removeHighlight(highlight) } }
         } message: { highlight in
@@ -314,8 +314,8 @@ struct MacReaderContent: View {
         if let link, !link.isFileURL {
             items.append(MenuAction("Add Link to Read Later", symbol: "text.badge.plus") { model.addToReadLater(url: link, title: nil) })
         }
-        if let link, TaskerSender.isAvailable {
-            items.append(MenuAction("Send Link to Tasker", symbol: "checklist") { TaskerSender.sendLink(link, title: nil, from: model) })
+        if let link, ThroughlineSender.isAvailable {
+            items.append(MenuAction("Send Link to Throughline", symbol: "checklist") { ThroughlineSender.sendLink(link, title: nil, from: model) })
         }
         guard !items.isEmpty else { return }
         items.append(.separator())

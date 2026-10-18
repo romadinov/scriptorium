@@ -140,6 +140,7 @@
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
+		<string>throughline</string>
 		<string>tasker</string>
 	</array>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

@@ -562,22 +562,22 @@ final class ReaderModel {
         go(to: page)
     }
 
-    /// What "Send Link to Tasker" stores for a link in the book: web links as they are; links within the
+    /// What "Send Link to Throughline" stores for a link in the book: web links as they are; links within the
     /// book as a Scriptorium link to their target chapter.
-    func taskerLink(for url: URL, title: String?) -> URL? {
+    func throughlineLink(for url: URL, title: String?, scheme: String = ThroughlineLink.scheme) -> URL? {
         guard let here = readingLink(), let documentID else { return nil }
         let note = "From \(here.title)\n\(here.url.absoluteString)"
         if url.isFileURL || url.scheme == "applewebdata" {
             guard let chapter = reflowable?.chapterIndex(for: url) else { return nil }
             let target = DeepLink(documentID: documentID, page: chapter).url
             let name = title ?? reflowable.flatMap { $0.chapterTitles.indices.contains(chapter) ? $0.chapterTitles[chapter] : nil }
-            return TaskerLink.add(title: ReadingLocationTitle.make(book: book.title, page: chapter, chapterTitle: name),
-                                  url: target, note: note)
+            return ThroughlineLink.add(title: ReadingLocationTitle.make(book: book.title, page: chapter, chapterTitle: name),
+                                       url: target, note: note, scheme: scheme)
         }
-        return TaskerLink.add(title: title ?? url.host() ?? url.absoluteString, url: url, note: note)
+        return ThroughlineLink.add(title: title ?? url.host() ?? url.absoluteString, url: url, note: note, scheme: scheme)
     }
 
-    /// A link to where the reader is (or to `highlight`), titled "Book — p. N" / "Book — Chapter", for Tasker,
+    /// A link to where the reader is (or to `highlight`), titled "Book — p. N" / "Book — Chapter", for Throughline,
     /// the share sheet and Copy Link. Nil until the book's fingerprint is known.
     func readingLink(highlight: Highlight? = nil) -> (url: URL, title: String, text: String)? {
         guard let documentID else { return nil }

@@ -1,12 +1,14 @@
 import Foundation
 
-/// tasker://add — captures a reading location into Tasker (the user's task app).
+/// throughline://add — captures a reading location into Throughline (the user's task app).
 /// Each value is encoded on its own: the Scriptorium deep link inside it has its own ? and &.
-public enum TaskerLink {
-    public static let scheme = "tasker"
+public enum ThroughlineLink {
+    public static let scheme = "throughline"
+    /// The app's former name; still accepted by Throughline, used only when the new scheme isn't registered.
+    public static let legacyScheme = "tasker"
 
-    /// `quick`: save straight to Tasker's Inbox and come back (x-success); otherwise open its Quick Entry pre-filled.
-    public static func add(title: String, url: URL, note: String? = nil, quick: Bool = true) -> URL {
+    /// `quick`: save straight to Throughline's Inbox and come back (x-success); otherwise open its Quick Entry pre-filled.
+    public static func add(title: String, url: URL, note: String? = nil, quick: Bool = true, scheme: String = scheme) -> URL {
         var parts = [("title", title), ("url", url.absoluteString)]
         if let note, !note.isEmpty { parts.append(("note", note)) }
         if quick { parts += [("quick", "1"), ("x-success", DeepLink.scheme + "://")] }

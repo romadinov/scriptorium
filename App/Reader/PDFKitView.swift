@@ -278,9 +278,9 @@ extension PDFKitView.Coordinator: UIContextMenuInteractionDelegate, UIGestureRec
                     },
                     UIAction(title: "Open", image: UIImage(systemName: "safari")) { _ in UIApplication.shared.open(url) },
                     UIAction(title: "Copy Link", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.url = url },
-                ] + (TaskerSender.isAvailable ? [
-                    UIAction(title: "Send Link to Tasker", image: UIImage(systemName: "checklist")) { _ in
-                        TaskerSender.sendLink(url, title: title, from: model)
+                ] + (ThroughlineSender.isAvailable ? [
+                    UIAction(title: "Send Link to Throughline", image: UIImage(systemName: "checklist")) { _ in
+                        ThroughlineSender.sendLink(url, title: title, from: model)
                     },
                 ] : []))
             }
