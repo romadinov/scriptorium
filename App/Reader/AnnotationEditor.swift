@@ -185,8 +185,8 @@ struct AnnotationEditor: View {
 }
 
 /// PencilKit canvas with the system tool picker. Fingers draw too, so it works without a Pencil.
-/// An endless-paper canvas: it always keeps half a screen of space below the ink, scrolls with two fingers
-/// (one finger or the Pencil draws), and "More Space" adds a screen.
+/// An endless-paper canvas: it always keeps half a screen of space below and to the right of the ink,
+/// scrolls in any direction with two fingers (one finger or the Pencil draws), and "More Space" adds a screen.
 struct PencilCanvas: UIViewRepresentable {
     @Binding var drawing: PKDrawing
     var moreSpace = 0
@@ -203,7 +203,9 @@ struct PencilCanvas: UIViewRepresentable {
         canvas.tool = PKInkingTool(.pen, color: .label, width: 3)
         canvas.delegate = context.coordinator
         canvas.alwaysBounceVertical = true
+        canvas.alwaysBounceHorizontal = true
         canvas.showsVerticalScrollIndicator = true
+        canvas.showsHorizontalScrollIndicator = true
         DispatchQueue.main.async { context.coordinator.fit(canvas) }
         let picker = context.coordinator.toolPicker
         picker.addObserver(canvas)
@@ -244,13 +246,15 @@ struct PencilCanvas: UIViewRepresentable {
 
         init(_ parent: PencilCanvas) { self.parent = parent }
 
-        /// Paper height: the ink plus half a screen, at least one screen, plus whatever More Space added.
+        /// Paper size: the ink plus half a screen right and below, at least one screen, plus whatever More
+        /// Space added below.
         func fit(_ canvas: PKCanvasView) {
-            let screen = max(canvas.bounds.height, 1)
-            let ink = canvas.drawing.strokes.isEmpty ? 0 : canvas.drawing.bounds.maxY
-            let height = max(screen, ink + screen / 2) + extra
-            if abs(canvas.contentSize.height - height) > 1 || canvas.contentSize.width != canvas.bounds.width {
-                canvas.contentSize = CGSize(width: canvas.bounds.width, height: height)
+            let screen = CGSize(width: max(canvas.bounds.width, 1), height: max(canvas.bounds.height, 1))
+            let ink = canvas.drawing.strokes.isEmpty ? .zero : canvas.drawing.bounds
+            let size = CGSize(width: max(screen.width, ink.maxX + screen.width / 2),
+                              height: max(screen.height, ink.maxY + screen.height / 2) + extra)
+            if abs(canvas.contentSize.height - size.height) > 1 || abs(canvas.contentSize.width - size.width) > 1 {
+                canvas.contentSize = size
             }
         }
 
