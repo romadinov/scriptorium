@@ -299,22 +299,35 @@ extension PageText {
                 for token in tokens(word.text) { flat.append((token, word.rect, lineIndex)) }
             }
         }
-        guard flat.count >= target.count else { return nil }
+        guard !flat.isEmpty else { return nil }
 
-        // Slide a window of the selection's length; keep the one with the most equal tokens.
-        var best = (score: 0, start: 0)
-        for start in 0...(flat.count - target.count) {
-            var score = 0
-            for i in 0..<target.count where flat[start + i].token == target[i] { score += 1 }
-            if score > best.score { best = (score, start) }
+        // Align the selection with the page's words from each starting word, tolerating an extra or missing
+        // word now and then (hyphenation, OCR splitting a word) without losing the rest; keep the best run.
+        var best = (score: 0, start: 0, end: 0)
+        for start in flat.indices where flat[start].token == target[0] || target.count > 1 && flat[start].token == target[1] {
+            var i = 0, j = start, score = 0
+            while i < target.count, j < flat.count, j < start + target.count + 8 {
+                if flat[j].token == target[i] {
+                    score += 1; i += 1; j += 1
+                } else if j + 1 < flat.count, flat[j + 1].token == target[i] {
+                    j += 1                                   // an extra word on the page
+                } else if i + 1 < target.count, flat[j].token == target[i + 1] {
+                    i += 1                                   // a word the page doesn't have
+                } else if flat[j].token.hasPrefix(target[i]) || target[i].hasPrefix(flat[j].token) {
+                    score += 1; i += 1; j += 1               // split or joined by hyphenation
+                } else {
+                    i += 1; j += 1
+                }
+            }
+            if score > best.score { best = (score, start, j) }
             if score == target.count { break }
         }
-        guard Double(best.score) >= Double(target.count) * 0.6 else { return nil }
+        guard best.end > best.start, Double(best.score) >= Double(target.count) * 0.6 else { return nil }
 
         // Merge per line into one rect each.
         var merged: [Int: CGRect] = [:]
         var order: [Int] = []
-        for item in flat[best.start..<(best.start + target.count)] {
+        for item in flat[best.start..<best.end] {
             if let existing = merged[item.line] {
                 merged[item.line] = existing.union(item.rect)
             } else {

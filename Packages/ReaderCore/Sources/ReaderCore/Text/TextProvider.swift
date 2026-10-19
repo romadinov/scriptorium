@@ -40,6 +40,15 @@ public actor TextProvider {
         return try await recognize(page: page)
     }
 
+    /// Where `selection` (a Live Text selection) is on `page`: matched in the page's text, and if the file's
+    /// own text layer doesn't match (DjVu layers are often garbled or misaligned), in fresh OCR of the page.
+    public func rects(matching selection: String, page: Int) async -> [CGRect]? {
+        let current = (try? await text(page: page, allowOCR: true)) ?? nil
+        if let rects = current?.rects(matching: selection) { return rects }
+        guard current?.origin != .ocr, let ocr = try? await recognize(page: page) else { return nil }
+        return ocr.rects(matching: selection)
+    }
+
     /// Forces OCR (e.g. when the embedded layer is garbage) and caches the result.
     @discardableResult
     public func recognize(page: Int) async throws -> PageText {

@@ -17,6 +17,8 @@ public struct ReadingPace: Codable, Sendable, Equatable {
     @discardableResult
     public mutating func record(_ seconds: Double) -> Bool {
         guard seconds >= Self.fastest, seconds <= Self.slowest else { return false }
+        // Once the pace is known, far quicker pages are skimming and far slower ones are interruptions.
+        if let typical = secondsPerPage, seconds < typical * 0.3 || seconds > typical * 4 { return false }
         samples.append(seconds)
         if samples.count > Self.memory { samples.removeFirst(samples.count - Self.memory) }
         return true

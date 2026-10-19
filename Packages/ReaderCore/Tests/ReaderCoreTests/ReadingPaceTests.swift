@@ -28,3 +28,16 @@ import Testing
     #expect(ReadingPace.describe(2 * 3600) == "2 h")
     #expect(ReadingPace.describe(14 * 3600 + 20 * 60) == "14 h")
 }
+
+@Suite struct ReadingPaceOutlierTests {
+    @Test func ignoresSkimsAndInterruptionsOnceKnown() {
+        var pace = ReadingPace()
+        for s in [60.0, 70, 65, 55, 62] { pace.record(s) }
+        let skim = pace.record(8)          // flicking through pages already read
+        let away = pace.record(500)        // wrote a suggestion, or the lid was closed
+        let normal = pace.record(80)
+        #expect(!skim && !away && normal)
+        #expect(pace.samples.count == 6)
+        #expect(pace.secondsPerPage == 63.5)
+    }
+}

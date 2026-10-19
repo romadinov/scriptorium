@@ -170,3 +170,22 @@ private func label(_ location: Highlight.Location) -> String {
     #expect(merged == "Improvement notes:\n\t- First @date(1) @done(2026-10-12) @fix(x)\n\t- Second @date(2)\n\t- Third @date(3)\n")
     #expect(SharedTextFile.merge(mac, iPad) == merged)
 }
+
+@Suite struct LiveTextMatchTests {
+    private func page(_ lines: [String]) -> PageText {
+        PageText(origin: .ocr, lines: lines.enumerated().map { i, line in
+            line.split(separator: " ").enumerated().map { j, w in
+                PageText.Word(text: String(w), rect: CGRect(x: Double(j) * 0.1, y: Double(i) * 0.05, width: 0.09, height: 0.04))
+            }
+        })
+    }
+
+    @Test func matchesAcrossHyphenationAndExtraWords() throws {
+        let text = page(["Если, как принято считать, недетерми-", "нированный алгоритм угадывает структуру S,",
+                         "зависящую некото- рым образом от условия"])
+        // Live Text joins the hyphenated word and drops a stray token; the old exact window failed here.
+        let rects = try #require(text.rects(matching: "как принято считать, недетерминированный алгоритм угадывает структуру S, зависящую"))
+        #expect(rects.count == 3)
+        #expect(text.rects(matching: "совсем другой текст про котов") == nil)
+    }
+}

@@ -160,6 +160,7 @@ private struct ReaderContent: View {
         }
         .animation(.snappy, value: model.backStack.count)
         .animation(.snappy, value: model.remotePosition)
+        .onChange(of: showAssistant) { _, open in if open { model.pausePace() } }   // asking isn't reading
         .onChange(of: model.readingPageNumber) {
             model.noteReadingPosition()
             model.notePageTurn()
@@ -305,7 +306,7 @@ private struct ReaderContent: View {
             ReadingLinkActions(model: model)
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
-                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
+                Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
             }
         }
     }
@@ -391,7 +392,7 @@ private struct ReaderContent: View {
                 Button("Highlights & Notes", systemImage: "highlighter") { showHighlights = true }
                 SendToMenu(book: model.book.url)
                 ReadingLinkActions(model: model)
-                Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext, file: noteFile) }
+                Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
                         Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1, remember: false) }
@@ -669,7 +670,10 @@ private struct SelectionBar: View {
             buttons(showTitles: false)
         }
         .padding(6)
-        .glassEffect(in: .capsule)
+        // Solid, not glass: over a printed page the glass bar blended into the text.
+        .background(.regularMaterial, in: .capsule)
+        .overlay(Capsule().strokeBorder(.separator))
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
     }
 
     private func buttons(showTitles: Bool) -> some View {

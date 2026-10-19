@@ -150,7 +150,7 @@ final class ReaderModel {
     var remotePosition: SyncedPosition?
     @ObservationIgnored private var positionSave: Task<Void, Never>?
     /// The highlight or page whose note is being edited.
-    var annotating: AnnotationTarget?
+    var annotating: AnnotationTarget? { didSet { if annotating != nil { pausePace() } } }
     private(set) var highlightLocationDescription = ""
     @ObservationIgnored private var highlightBook: BookHighlights?
     @ObservationIgnored private let highlightStore: HighlightStore
@@ -305,6 +305,8 @@ final class ReaderModel {
     private(set) var pace = ReadingPace()
     @ObservationIgnored private var overallPace = ReadingPace()
     @ObservationIgnored private var lastTurn: (page: Int, at: Date)?
+    /// Pages already timed or passed: going back and forward over them again isn't new reading.
+    @ObservationIgnored private var furthestTimedPage = -1
     @ObservationIgnored private var paceKey: String { "pace:" + (documentID ?? book.url.lastPathComponent) }
 
     private func loadPace() {
@@ -318,7 +320,8 @@ final class ReaderModel {
     func notePageTurn() {
         let page = readingPageNumber, now = Date()
         defer { lastTurn = (page, now) }
-        guard let last = lastTurn, page - last.page == 1 || page - last.page == 2 else { return }
+        defer { furthestTimedPage = max(furthestTimedPage, page) }
+        guard let last = lastTurn, page - last.page == 1 || page - last.page == 2, page > furthestTimedPage else { return }
         let seconds = now.timeIntervalSince(last.at) / Double(page - last.page)
         guard pace.record(seconds) else { return }
         overallPace.record(seconds)
@@ -327,7 +330,7 @@ final class ReaderModel {
         UserDefaults.standard.set(try? encoder.encode(overallPace), forKey: "pace:all")
     }
 
-    /// The app went to the background: time away isn't reading time.
+    /// The app went to the background, or a suggestion/note/assistant is open: that time isn't reading time.
     func pausePace() { lastTurn = nil }
 
     /// Time to finish the book at your pace (nil until a few pages have been timed).

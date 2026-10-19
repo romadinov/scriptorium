@@ -22,8 +22,7 @@ struct PagedImageView: UIViewRepresentable {
         model.captureSelection = { [weak view] in
             // VisionKit doesn't expose selection geometry; find the selected words in the page's text layer.
             guard let view, let page = view.selectionPage, let selected = view.selectedText, !selected.isEmpty,
-                  let pageText = try? await text.text(page: page, allowOCR: true),
-                  let rects = pageText.rects(matching: selected) else { return nil }
+                  let rects = await text.rects(matching: selected, page: page) else { return nil }
             return (.image(page: page, rects: rects), selected)
         }
         model.clearSelection = { [weak view] in view?.clearSelections() }
