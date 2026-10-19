@@ -17,9 +17,13 @@ cp -R "$IOS_DD/Build/Products/Release-iphoneos/"*.dSYM "$SYMS/$BUILD/" 2>/dev/nu
 DEVICES=$(xcrun devicectl list devices 2>/dev/null || true)
 for device in "iPad:$IPAD" "iPhone:$IPHONE"; do
   name=${device%%:*} id=${device#*:}
-  if grep -q "$id.*\(available\|connected\)" <<< "$DEVICES"; then
-    xcrun devicectl device install app --device "$id" "$IOS_DD/Build/Products/Release-iphoneos/Reader.app" >/dev/null \
-      && echo "$name: installed build $BUILD"
+  # Whole words: "unavailable" (paired but not reachable) contains "available".
+  if grep -qE "$id.*[[:space:]](available|connected)[[:space:]]" <<< "$DEVICES"; then
+    if xcrun devicectl device install app --device "$id" "$IOS_DD/Build/Products/Release-iphoneos/Reader.app" >/dev/null 2>&1; then
+      echo "$name: installed build $BUILD"
+    else
+      echo "$name: install FAILED (unlocked and trusted?)"
+    fi
   else
     echo "$name: not connected, skipped"
   fi
