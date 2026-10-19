@@ -129,7 +129,7 @@ private struct ReaderContent: View {
                         onTranslate: { showTranslation = true },
                         onHighlight: { color in Task { await model.addHighlight(color: color) } },
                         onNote: { Task { await model.annotateSelection() } },
-                        onTaskApp: TaskAppSender.isAvailable ? { TaskAppSender.send(model) } : nil)
+                        onTaskApp: TaskAppSender.isAvailable ? { model.taskDraft = TaskAppSender.draft(model) } : nil)
                 }
             }
             .padding(.bottom, 20)
@@ -200,7 +200,7 @@ private struct ReaderContent: View {
                 model.ask("", action: .explain, settings: settings)
             }
             if TaskAppSender.isAvailable {
-                Button("Send to \(TaskAppLink.appName)") { TaskAppSender.send(model, highlight: highlight) }
+                Button("Send to \(TaskAppLink.appName)") { model.taskDraft = TaskAppSender.draft(model, highlight: highlight) }
             }
             Button("Remove highlight", role: .destructive) { Task { await model.removeHighlight(highlight) } }
         } message: { highlight in
@@ -208,6 +208,9 @@ private struct ReaderContent: View {
         }
         .sheet(item: $model.annotating) { target in
             AnnotationEditor(model: model, target: target)
+        }
+        .sheet(item: $model.taskDraft) { draft in
+            TaskDraftSheet(draft: draft) { TaskAppSender.send($0) }
         }
         .confirmationDialog("This page has a note", isPresented: $confirmRemovePageNote) {
             Button("Remove Bookmark and Note", role: .destructive) { Task { await model.toggleBookmark() } }
@@ -617,18 +620,66 @@ struct DictionaryTerm: Identifiable {
     var id: String { text }
 }
 
+/// Write the task before it goes to the task app: title and note prefilled, the link back attached.
+private struct TaskDraftSheet: View {
+    @State var draft: TaskAppSender.Draft
+    let onSend: (TaskAppSender.Draft) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var titleFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Task") {
+                    TextField("Title", text: $draft.title, axis: .vertical).focused($titleFocused).accessibilityIdentifier("task.title")
+                }
+                Section {
+                    TextField("Note", text: $draft.note, axis: .vertical).lineLimit(3...10)
+                } header: {
+                    Text("Note")
+                } footer: {
+                    Text("A link back to this place in the book is attached.")
+                }
+            }
+            .navigationTitle("Send to \(TaskAppLink.appName)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") { onSend(draft); dismiss() }
+                        .disabled(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear { titleFocused = true }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
 /// Share a link to this page (title + deep link, so the task app's share extension can capture it) and Send to the task app.
 private struct ReadingLinkActions: View {
     let model: ReaderModel
+    /// The book's cover for the share sheet's preview (without one, iOS shows the app icon cut in half).
+    @State private var cover: UIImage?
 
     var body: some View {
         if let link = model.readingLink() {
-            ShareLink(item: link.url, subject: Text(link.title), message: link.text.isEmpty ? nil : Text(link.text),
-                      preview: SharePreview(link.title)) {
-                Label("Share Link to Page", systemImage: "link")
+            Group {
+                if let cover {
+                    ShareLink(item: link.url, subject: Text(link.title), message: link.text.isEmpty ? nil : Text(link.text),
+                              preview: SharePreview(link.title, image: Image(uiImage: cover))) {
+                        Label("Share Link to Page", systemImage: "link")
+                    }
+                } else {
+                    ShareLink(item: link.url, subject: Text(link.title), message: link.text.isEmpty ? nil : Text(link.text),
+                              preview: SharePreview(link.title, image: Image(systemName: "book.closed"))) {
+                        Label("Share Link to Page", systemImage: "link")
+                    }
+                }
             }
+            .task(id: model.book.url) { cover = await Thumbnails.shared.image(for: model.book.url) }
             if TaskAppSender.isAvailable {
-                Button("Send to \(TaskAppLink.appName)", systemImage: "checklist") { TaskAppSender.send(model) }
+                Button("Send to \(TaskAppLink.appName)", systemImage: "checklist") { model.taskDraft = TaskAppSender.draft(model) }
             }
         }
     }

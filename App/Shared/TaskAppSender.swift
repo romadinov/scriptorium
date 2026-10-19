@@ -24,6 +24,27 @@ enum TaskAppSender {
         #endif
     }
 
+    /// A task about to be sent, editable first (iPhone/iPad show it in a sheet).
+    struct Draft: Identifiable {
+        let id = UUID()
+        var title: String
+        var note: String
+        let link: URL
+    }
+
+    static func draft(_ model: ReaderModel, highlight: Highlight? = nil) -> Draft? {
+        model.readingLink(highlight: highlight).map { Draft(title: $0.title, note: $0.text, link: $0.url) }
+    }
+
+    static func send(_ draft: Draft) {
+        let url = TaskAppLink.add(title: draft.title, url: draft.link, note: draft.note, scheme: scheme ?? TaskAppLink.scheme)
+        #if os(iOS)
+        UIApplication.shared.open(url)
+        #else
+        NSWorkspace.shared.open(url)
+        #endif
+    }
+
     static func send(_ model: ReaderModel, highlight: Highlight? = nil) {
         guard let link = model.readingLink(highlight: highlight) else { return }
         let url = TaskAppLink.add(title: link.title, url: link.url, note: link.text, scheme: scheme ?? TaskAppLink.scheme)

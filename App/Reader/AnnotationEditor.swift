@@ -14,6 +14,8 @@ struct AnnotationEditor: View {
     @State private var note: String
     @State private var drawing = PKDrawing()
     @State private var drawingChanged = false
+    /// Bumped by "More Space": the canvas grows by a screen and scrolls there.
+    @State private var moreSpace = 0
     @State private var loadingDrawing: Bool
     @FocusState private var textFocused: Bool
 
@@ -40,6 +42,11 @@ struct AnnotationEditor: View {
                     }
                     .pickerStyle(.segmented)
                     // Up here, not in a bottom bar: the Pencil tool palette covers the bottom of the sheet.
+                    if mode == .drawing {
+                        Button("More Space", systemImage: "arrow.down.to.line.compact") { moreSpace += 1 }
+                            .labelStyle(.iconOnly)
+                            .help("Add a page of space below (or scroll with two fingers)")
+                    }
                     if mode == .drawing && !drawing.strokes.isEmpty {
                         Button("Clear Drawing", systemImage: "trash", role: .destructive) {
                             drawing = PKDrawing()
@@ -59,7 +66,7 @@ struct AnnotationEditor: View {
                         .onAppear { if note.isEmpty { textFocused = true } }
                 case .drawing:
                     ZStack {
-                        PencilCanvas(drawing: $drawing, onChange: { drawingChanged = true })
+                        PencilCanvas(drawing: $drawing, moreSpace: moreSpace, onChange: { drawingChanged = true })
                             .accessibilityIdentifier("annotation.canvas")
                         if loadingDrawing { ProgressView() }
                     }
@@ -137,8 +144,11 @@ struct AnnotationEditor: View {
 }
 
 /// PencilKit canvas with the system tool picker. Fingers draw too, so it works without a Pencil.
+/// An endless-paper canvas: it always keeps half a screen of space below the ink, scrolls with two fingers
+/// (one finger or the Pencil draws), and "More Space" adds a screen.
 struct PencilCanvas: UIViewRepresentable {
     @Binding var drawing: PKDrawing
+    var moreSpace = 0
     var onChange: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -151,6 +161,9 @@ struct PencilCanvas: UIViewRepresentable {
         canvas.isOpaque = false
         canvas.tool = PKInkingTool(.pen, color: .label, width: 3)
         canvas.delegate = context.coordinator
+        canvas.alwaysBounceVertical = true
+        canvas.showsVerticalScrollIndicator = true
+        DispatchQueue.main.async { context.coordinator.fit(canvas) }
         let picker = context.coordinator.toolPicker
         picker.addObserver(canvas)
         picker.setVisible(true, forFirstResponder: canvas)
@@ -164,6 +177,14 @@ struct PencilCanvas: UIViewRepresentable {
             context.coordinator.updating = true
             canvas.drawing = drawing
             context.coordinator.updating = false
+            context.coordinator.fit(canvas)
+        }
+        if moreSpace != context.coordinator.moreSpace {
+            context.coordinator.moreSpace = moreSpace
+            context.coordinator.extra += canvas.bounds.height
+            context.coordinator.fit(canvas)
+            let bottom = max(0, canvas.contentSize.height - canvas.bounds.height)
+            canvas.setContentOffset(CGPoint(x: 0, y: bottom), animated: true)
         }
     }
 
@@ -176,10 +197,24 @@ struct PencilCanvas: UIViewRepresentable {
         var parent: PencilCanvas
         let toolPicker = PKToolPicker()
         var updating = false
+        var moreSpace = 0
+        /// Space added with More Space, on top of the automatic margin.
+        var extra: CGFloat = 0
 
         init(_ parent: PencilCanvas) { self.parent = parent }
 
+        /// Paper height: the ink plus half a screen, at least one screen, plus whatever More Space added.
+        func fit(_ canvas: PKCanvasView) {
+            let screen = max(canvas.bounds.height, 1)
+            let ink = canvas.drawing.strokes.isEmpty ? 0 : canvas.drawing.bounds.maxY
+            let height = max(screen, ink + screen / 2) + extra
+            if abs(canvas.contentSize.height - height) > 1 || canvas.contentSize.width != canvas.bounds.width {
+                canvas.contentSize = CGSize(width: canvas.bounds.width, height: height)
+            }
+        }
+
         func canvasViewDrawingDidChange(_ canvas: PKCanvasView) {
+            fit(canvas)
             guard !updating else { return }
             parent.drawing = canvas.drawing
             parent.onChange()

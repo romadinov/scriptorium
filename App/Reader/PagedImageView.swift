@@ -30,7 +30,7 @@ struct PagedImageView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: PagedImageScrollView, context: Context) {
-        view.highlights = model.highlights
+        view.highlights = model.displayedHighlights
     }
 
 }

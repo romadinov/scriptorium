@@ -34,7 +34,7 @@ struct MacImagePagesView: NSViewRepresentable {
 
     func updateNSView(_ view: PageScrollView, context: Context) {
         view.contextMenu = contextMenu
-        view.highlights = model.highlights
+        view.highlights = model.displayedHighlights
     }
 
     static func dismantleNSView(_ view: PageScrollView, coordinator: ()) {}

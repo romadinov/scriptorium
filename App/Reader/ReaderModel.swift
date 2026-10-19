@@ -145,7 +145,13 @@ final class ReaderModel {
 
     // Highlights
     var highlights: [Highlight] = []
+    /// The sentence being read aloud on a scanned page, drawn like a (temporary, unsaved) blue highlight.
+    var spokenMark: Highlight?
+    /// What the page views draw: the saved highlights plus the spoken sentence.
+    var displayedHighlights: [Highlight] { spokenMark.map { highlights + [$0] } ?? highlights }
     var tappedHighlight: Highlight?
+    /// "Send to Uberdoer": the task being written before it's sent.
+    var taskDraft: TaskAppSender.Draft?
     /// A newer position saved on another device, offered to the reader ("Continue on p. 120 from Mac?").
     var remotePosition: SyncedPosition?
     @ObservationIgnored private var positionSave: Task<Void, Never>?
@@ -273,10 +279,20 @@ final class ReaderModel {
             }
             return []
         }
-        speechHighlight = { [weak self] page, _ in
-            guard let self, page >= 0, page != currentPage else { return }
-            jumpToPage?(page)
-            currentPage = page
+        speechHighlight = { [weak self] page, range in
+            guard let self else { return }
+            guard page >= 0 else { spokenMark = nil; return }
+            if page != currentPage {
+                jumpToPage?(page)
+                currentPage = page
+            }
+            // Scans: mark the sentence being read (PDFKit pages draw their own mark).
+            guard imageMode || pdfDocument == nil, let range else { return }
+            Task { [weak self] in
+                guard let self, let pageText = (try? await self.text.text(page: page, allowOCR: false)) ?? nil else { return }
+                let rects = pageText.rects(forPlainTextRange: range)
+                self.spokenMark = rects.isEmpty ? nil : Highlight(text: "", color: .blue, location: .image(page: page, rects: rects))
+            }
         }
     }
 
@@ -291,7 +307,9 @@ final class ReaderModel {
                 .filter { $0 >= 0 && $0 < pdf.pageCount }
                 .compactMap { pdf.page(at: $0)?.string }
         } else {
-            guard let ocr = try? await text.text(page: page, allowOCR: true)?.plainText else { return nil }
+            // Scans know where each line is: drop running heads and page numbers by position too (comparing
+            // with neighbours fails when they have no text yet).
+            guard let ocr = try? await text.text(page: page, allowOCR: true)?.plainTextWithoutMargins else { return nil }
             raw = ocr
             neighbours = await text.neighbourTexts(of: page)
         }

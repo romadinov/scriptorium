@@ -30,7 +30,7 @@ struct HorizontalPageView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ pager: UIPageViewController, context: Context) {
-        context.coordinator.update(highlights: model.highlights)
+        context.coordinator.update(highlights: model.displayedHighlights)
     }
 
     static func dismantleUIViewController(_ pager: UIPageViewController, coordinator: Coordinator) {
@@ -49,7 +49,7 @@ struct HorizontalPageView: UIViewControllerRepresentable {
 
         init(model: ReaderModel) {
             self.model = model
-            highlights = model.highlights
+            highlights = model.displayedHighlights
         }
 
         func install() {

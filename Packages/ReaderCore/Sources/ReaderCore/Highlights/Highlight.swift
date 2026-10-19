@@ -283,6 +283,38 @@ public enum DocumentFingerprint {
 }
 
 extension PageText {
+    /// `plainText` with running heads, folios and page numbers — short lines at the very top or bottom edge
+    /// of the page — replaced by spaces. Same length, so offsets into `plainText` stay valid.
+    public var plainTextWithoutMargins: String {
+        lines.map { line in
+            let text = line.map(\.text).joined(separator: " ")
+            let rects = line.map(\.rect).filter { $0 != .zero }
+            guard let top = rects.map(\.minY).min(), let bottom = rects.map(\.maxY).max() else { return text }
+            let atEdge = bottom < 0.085 || top > 0.93
+            return atEdge && text.count <= 80 ? String(repeating: " ", count: (text as NSString).length) : text
+        }.joined(separator: "\n")
+    }
+
+    /// Rectangles (one per line) of the words covering `range` of `plainText` — for marking the sentence
+    /// being read aloud on a scanned page.
+    public func rects(forPlainTextRange range: NSRange) -> [CGRect] {
+        var offset = 0, result: [CGRect] = []
+        for line in lines {
+            var lineRect: CGRect?
+            for (i, word) in line.enumerated() {
+                let length = (word.text as NSString).length
+                let wordRange = NSRange(location: offset, length: length)
+                if NSIntersectionRange(wordRange, range).length > 0, word.rect != .zero {
+                    lineRect = lineRect.map { $0.union(word.rect) } ?? word.rect
+                }
+                offset += length + (i < line.count - 1 ? 1 : 0)
+            }
+            offset += 1   // the line break
+            if let lineRect { result.append(lineRect) }
+        }
+        return result
+    }
+
     /// Rectangles (one per line) of the words that best match `selection` — used to draw highlights
     /// for Live Text selections, whose geometry VisionKit doesn't expose. `nil` if nothing matches well.
     public func rects(matching selection: String) -> [CGRect]? {

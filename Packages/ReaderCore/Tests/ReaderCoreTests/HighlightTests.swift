@@ -189,3 +189,14 @@ private func label(_ location: Highlight.Location) -> String {
         #expect(text.rects(matching: "совсем другой текст про котов") == nil)
     }
 }
+
+@Suite struct PageMarginTests {
+    @Test func blanksRunningHeadsAndPageNumbersKeepingLength() {
+        func line(_ s: String, y: Double) -> [PageText.Word] { [PageText.Word(text: s, rect: CGRect(x: 0.1, y: y, width: 0.8, height: 0.02))] }
+        let page = PageText(origin: .ocr, lines: [line("1.6. О содержании книги 29", y: 0.03), line("либо путем самостоятельного доказательства", y: 0.10),
+                                                  line("задач. Ниже приводится обзор.", y: 0.5), line("29", y: 0.95)])
+        let text = page.plainTextWithoutMargins
+        #expect((text as NSString).length == (page.plainText as NSString).length)
+        #expect(!text.contains("содержании") && !text.contains("29") && text.contains("либо путем"))
+    }
+}

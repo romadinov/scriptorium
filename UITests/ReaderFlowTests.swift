@@ -256,6 +256,13 @@ final class ReaderFlowTests: XCTestCase {
         canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.3))
             .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.6)))
         snap("annotation-3-drawing")
+        // More room: the canvas grows by a screen and scrolls down; draw there too.
+        XCTAssertTrue(app.buttons["More Space"].exists, "No More Space button")
+        app.buttons["More Space"].tap()
+        sleep(1)
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)))
+        snap("annotation-3b-more-space")
         app.buttons["Save"].tap()
         let pill = app.buttons["pageNote.pill"]
         XCTAssertTrue(pill.waitForExistence(timeout: 5), "Page shows no note marker")
@@ -784,6 +791,7 @@ final class ReaderFlowTests: XCTestCase {
     /// and Share Link to Page is offered.
     func testSendToTaskApp() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone only")
+        XCUIApplication(bundleIdentifier: "com.romadinov.tasker").terminate()
         openFolder("Physics")
         open(bookMatching: "Thermodynamics, PDF")
         XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
@@ -794,6 +802,13 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(send.exists, "No Send to the task app (is the task app installed on this simulator?)")
         snap("tasker-1-menu")
         send.tap()
+        // A sheet to write the task first: title prefilled, editable.
+        XCTAssertTrue(app.navigationBars["Send to Uberdoer"].waitForExistence(timeout: 5), "No task sheet")
+        // A multi-line field shows up as a text view.
+        let title = app.descendants(matching: .any)["task.title"]
+        XCTAssertTrue((title.value as? String ?? "").contains("Thermodynamics"), "Title not prefilled")
+        snap("tasker-1b-sheet")
+        app.buttons["Send"].tap()
         let tasker = XCUIApplication(bundleIdentifier: "com.romadinov.tasker")
         // iOS may ask to confirm opening another app.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -802,10 +817,9 @@ final class ReaderFlowTests: XCTestCase {
             snap("tasker-2-confirm")
             open.tap()
         }
-        // Scriptorium hands uberdoer://add to iOS and leaves the foreground. (The task app itself coming forward is
-        // the task app's side: its simulator build currently crashes at launch setting up CloudKit.)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10) || tasker.wait(for: .runningForeground, timeout: 1),
-                      "Scriptorium did not hand off to the task app")
+        // Uberdoer launches, saves the task (quick=1) and returns here via x-success.
+        XCTAssertTrue(tasker.wait(for: .runningForeground, timeout: 10) || tasker.state != .notRunning,
+                      "The task app was not opened")
         sleep(2)
         snap("tasker-2-captured")
     }
