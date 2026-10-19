@@ -16,6 +16,8 @@ struct AnnotationEditor: View {
     @State private var drawingChanged = false
     /// Bumped by "More Space": the canvas grows by a screen and scrolls there.
     @State private var moreSpace = 0
+    /// iPad: the editor as a large, nearly full-screen sheet (remembered) instead of a form-sized one.
+    @AppStorage("annotationEditorExpanded") private var expanded = false
     @State private var loadingDrawing: Bool
     @FocusState private var textFocused: Bool
 
@@ -23,13 +25,39 @@ struct AnnotationEditor: View {
         self.model = model
         self.target = target
         let item = target.item
+        // Reopened at another size: carry on exactly where it was.
+        if let draft = model.annotationDraft, draft.targetID == target.id {
+            _note = State(initialValue: draft.note)
+            _drawing = State(initialValue: (try? PKDrawing(data: draft.drawing)) ?? PKDrawing())
+            _drawingChanged = State(initialValue: draft.drawingChanged)
+            _loadingDrawing = State(initialValue: false)
+            _mode = State(initialValue: draft.drawingMode ? .drawing : .text)
+            restored = true
+            return
+        }
         _note = State(initialValue: item.note ?? "")
         _loadingDrawing = State(initialValue: item.drawingID != nil)
         // Open on whatever the note already has; a new note starts with text.
         _mode = State(initialValue: item.drawingID != nil && !item.hasNote ? .drawing : .text)
     }
 
+    /// Opened from a draft (after Expand), not from what's saved.
+    private var restored = false
+
+    /// Close and reopen at the other size (a sheet's size is fixed once it's shown), keeping everything.
+    private func toggleSize() {
+        model.annotationDraft = .init(targetID: target.id, note: note, drawing: drawing.dataRepresentation(),
+                                      drawingMode: mode == .drawing, drawingChanged: drawingChanged)
+        expanded.toggle()
+        model.reopenAnnotation = target
+        dismiss()
+    }
+
     var body: some View {
+        editor.presentationSizing(EditorSizing(expanded: expanded))
+    }
+
+    private var editor: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 Text(subject)
@@ -81,6 +109,18 @@ struct AnnotationEditor: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+                if UIDevice.current.userInterfaceIdiom == .pad {
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 8) {
+                            Text(title).font(.headline)
+                            Button(expanded ? "Smaller Editor" : "Expand Editor",
+                                   systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+                                toggleSize()
+                            }
+                            .labelStyle(.iconOnly)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }.disabled(loadingDrawing)
                 }
@@ -89,8 +129,9 @@ struct AnnotationEditor: View {
         // Clear explicitly: if `annotating` kept this target, setting it again (e.g. from the page-note
         // pill) would be "no change" and the sheet wouldn't reopen.
         .onDisappear { if model.annotating?.id == target.id { model.annotating = nil } }
+        .onAppear { if restored { model.annotationDraft = nil } }
         .task {
-            guard let id = target.item.drawingID else { return }
+            guard !restored, let id = target.item.drawingID else { return }
             if let data = await model.loadDrawing(id), let stored = try? PKDrawing(data: data) {
                 drawing = stored
             }
@@ -219,5 +260,14 @@ struct PencilCanvas: UIViewRepresentable {
             parent.drawing = canvas.drawing
             parent.onChange()
         }
+    }
+}
+
+/// The note editor's sheet size: form-sized, or (expanded) as large as the screen allows.
+private struct EditorSizing: PresentationSizing {
+    var expanded: Bool
+    func proposedSize(for root: PresentationSizingRoot, context: PresentationSizingContext) -> ProposedViewSize {
+        let form: FormPresentationSizing = .form
+        return expanded ? ProposedViewSize(width: .infinity, height: .infinity) : form.proposedSize(for: root, context: context)
     }
 }

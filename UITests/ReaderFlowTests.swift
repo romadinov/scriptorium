@@ -251,6 +251,25 @@ final class ReaderFlowTests: XCTestCase {
         let canvas = app.otherElements["annotation.canvas"].exists ? app.otherElements["annotation.canvas"]
                                                                     : app.scrollViews["annotation.canvas"]
         XCTAssertTrue(canvas.waitForExistence(timeout: 5), "No drawing canvas")
+        // iPad: the editor expands to nearly full screen (and back).
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            if app.buttons["Smaller Editor"].exists {   // left expanded by an earlier run
+                app.buttons["Smaller Editor"].tap()
+                sleep(2)
+            }
+            snap("annotation-2a-editor")
+            XCTAssertTrue(app.buttons["Expand Editor"].waitForExistence(timeout: 5),
+                          "No Expand Editor button; buttons: \(app.buttons.allElementsBoundByIndex.map(\.label))")
+            let before = canvas.frame
+            app.buttons["Expand Editor"].tap()
+            sleep(2)   // closes and reopens at the larger size
+            XCTAssertTrue(canvas.waitForExistence(timeout: 5))
+            XCTAssertGreaterThan(canvas.frame.width * canvas.frame.height, before.width * before.height * 1.5, "Editor didn't expand")
+            snap("annotation-2b-expanded")
+            app.buttons["Smaller Editor"].tap()
+            sleep(2)
+            XCTAssertTrue(canvas.waitForExistence(timeout: 5))
+        }
         let start = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.3))
         start.press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)))
         canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.3))

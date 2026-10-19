@@ -206,7 +206,17 @@ private struct ReaderContent: View {
         } message: { highlight in
             Text("“\(highlight.text.prefix(140))”")
         }
-        .sheet(item: $model.annotating) { target in
+        .sheet(item: $model.annotating, onDismiss: {
+            // Expand/Smaller: reopen at the new size with the unsaved note carried over.
+            if let target = model.reopenAnnotation {
+                model.reopenAnnotation = nil
+                // After the closing editor's own clean-up (which clears `annotating`) has run.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    model.annotating = target
+                }
+            }
+        }) { target in
             AnnotationEditor(model: model, target: target)
         }
         .sheet(item: $model.taskDraft) { draft in

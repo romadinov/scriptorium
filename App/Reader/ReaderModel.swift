@@ -157,6 +157,11 @@ final class ReaderModel {
     @ObservationIgnored private var positionSave: Task<Void, Never>?
     /// The highlight or page whose note is being edited.
     var annotating: AnnotationTarget? { didSet { if annotating != nil { pausePace() } } }
+    /// The note editor's unsaved state while it closes and reopens at another size (iPad Expand).
+    struct AnnotationDraft { var targetID: UUID; var note: String; var drawing: Data; var drawingMode: Bool; var drawingChanged: Bool }
+    @ObservationIgnored var annotationDraft: AnnotationDraft?
+    /// Reopen the editor on this target as soon as it has closed.
+    @ObservationIgnored var reopenAnnotation: AnnotationTarget?
     private(set) var highlightLocationDescription = ""
     @ObservationIgnored private var highlightBook: BookHighlights?
     @ObservationIgnored private let highlightStore: HighlightStore
