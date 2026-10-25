@@ -332,7 +332,9 @@ private struct ReaderContent: View {
             ReadingLinkActions(model: model)
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
-                Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
+                if DeveloperBuild.isDeveloper {
+                    Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
+                }
                 Divider()
                 Button("Delete Book…", systemImage: "trash", role: .destructive) { confirmDelete = true }
             }
@@ -420,7 +422,9 @@ private struct ReaderContent: View {
                 Button("Highlights & Notes", systemImage: "highlighter") { showHighlights = true }
                 SendToMenu(book: model.book.url)
                 ReadingLinkActions(model: model)
-                Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
+                if DeveloperBuild.isDeveloper {
+                    Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
+                }
                 Divider()
                 Button("Delete Book…", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 if model.reflowable != nil && model.source.pageCount > 1 {

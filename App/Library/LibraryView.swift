@@ -202,7 +202,9 @@ private struct FolderView: View {
                             layout = layout == .list ? .grid : .list
                         }
                         Divider()
-                        Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
+                        if DeveloperBuild.isDeveloper {
+                            Button("Suggest an Improvement…", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
+                        }
                         Button("Settings", systemImage: "gearshape") { showSettings = true }
                     }
                 }
@@ -295,7 +297,9 @@ private struct FolderView: View {
                 }
                 Button("Read Later", systemImage: "text.badge.plus") { showReadLater = true }
                 Button("Bookmarks", systemImage: "bookmark") { showNotes = true }
-                Button("Suggest an Improvement", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
+                if DeveloperBuild.isDeveloper {
+                    Button("Suggest an Improvement", systemImage: "lightbulb") { noteRequest.start(context: noteContext) }
+                }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if library.isSyncingInbox {

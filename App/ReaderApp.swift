@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         InboxBackgroundImport.register()   // BGTaskScheduler requires registration during launch
-        CrashReporter.shared.start()        // crash/hang reports → iCloud Drive › Scriptorium › Crash reports
+        if DeveloperBuild.isDeveloper { CrashReporter.shared.start() }        // crash/hang reports → iCloud Drive › Scriptorium › Crash reports
         return true
     }
 }

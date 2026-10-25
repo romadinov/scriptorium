@@ -76,7 +76,7 @@ final class MacRouter {
 
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        MainActor.assumeIsolated { CrashReporter.shared.start() }   // → iCloud Drive › Scriptorium › Crash reports
+        if DeveloperBuild.isDeveloper { MainActor.assumeIsolated { CrashReporter.shared.start() } }   // → iCloud Drive › Scriptorium › Crash reports
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

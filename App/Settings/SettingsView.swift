@@ -80,13 +80,15 @@ struct SettingsView: View {
                     Text("Your Send to Kindle address, for sending EPUB, PDF and Word books to your Kindle. " + KindleSender.approvedSendersHelp)
                 }
 
-                Section {
-                    Button("Suggest an Improvement…", systemImage: "lightbulb") {
-                        dismiss()
-                        Task { try? await Task.sleep(for: .milliseconds(400)); noteRequest.start(context: "Settings") }
+                if DeveloperBuild.isDeveloper {
+                    Section {
+                        Button("Suggest an Improvement…", systemImage: "lightbulb") {
+                            dismiss()
+                            Task { try? await Task.sleep(for: .milliseconds(400)); noteRequest.start(context: "Settings") }
+                        }
+                    } footer: {
+                        Text("Notes are saved to iCloud Drive › Scriptorium › Improvement notes.md, with an optional screenshot.")
                     }
-                } footer: {
-                    Text("Notes are saved to iCloud Drive › Scriptorium › Improvement notes.md, with an optional screenshot.")
                 }
 
                 Section {

@@ -18,6 +18,7 @@
 		1F91408DB5E5794529C54E20 /* MacReadLaterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1EB19160FD15C30982DF2AB /* MacReadLaterView.swift */; };
 		292B8784CC573534982A7A39 /* SendToMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C1D3BA7511FA6CA964C21 /* SendToMenu.swift */; };
 		293D6C5CF4AE3C52E40DD924 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 91665D257827EDB0F9C72846 /* Assets.xcassets */; };
+		33B03227DE3AA32C4B7D19A1 /* DeveloperBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FF90C61B9AA0BA709D18C5C /* DeveloperBuild.swift */; };
 		343FF33F2432BAA0F37D140D /* ScriptoriumMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208364F007316AFDE53579F2 /* ScriptoriumMacApp.swift */; };
 		351579D63B17292D3610BEBE /* InboxAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD8F32EB58A2CD39C018AD3 /* InboxAutomation.swift */; };
 		368F01F5646425BFF1127BB2 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50DDEB6759BD6CF8EE219A29 /* Platform.swift */; };
@@ -36,6 +37,7 @@
 		653D99CE596977ABFF9D85D7 /* ReflowableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1780E587DDBB8C98CC62E2D9 /* ReflowableView.swift */; };
 		6A45B60150D81F83EACAF969 /* MacAllNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1A2CB5181B22060CA94D48 /* MacAllNotesView.swift */; };
 		6D3B0DB81FB08AEA6D9369B4 /* WordDocConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7CFD4D1B5ACE6F91037ED0 /* WordDocConverter.swift */; };
+		79BE32C85F2C9358C33280D4 /* DeveloperBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FF90C61B9AA0BA709D18C5C /* DeveloperBuild.swift */; };
 		7B49954A65E4C37E796A43E8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1E990AFC7A9332B2AC6B13 /* SettingsView.swift */; };
 		7D3BD2EE615767A57CAF5E30 /* MacAnnotationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33DD102B979B5A846542DBD4 /* MacAnnotationEditor.swift */; };
 		7D934473BD62EA2034DFB851 /* ReaderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D50ED6D61D0776BC7B432C9 /* ReaderModel.swift */; };
@@ -115,6 +117,7 @@
 		6ACF1F46BF750E48868C06EA /* ReaderUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ReaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C6E9917657EE1808A06DEDC /* Scriptorium.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Scriptorium.entitlements; sourceTree = "<group>"; };
 		6E258E376627C32E2C194CAE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6FF90C61B9AA0BA709D18C5C /* DeveloperBuild.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperBuild.swift; sourceTree = "<group>"; };
 		72FE652A71E0B2A8A29CEA01 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		76E58E0828F927D1DF07DF2B /* ScriptoriumMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ScriptoriumMac.entitlements; sourceTree = "<group>"; };
 		7B52678E669C1A224CEFEC51 /* ScriptoriumMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScriptoriumMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -297,6 +300,7 @@
 			isa = PBXGroup;
 			children = (
 				A5F9226638DBAE91CC8920FD /* CrashReporter.swift */,
+				6FF90C61B9AA0BA709D18C5C /* DeveloperBuild.swift */,
 				5D9E681D721C220D47C24D60 /* DeviceIdentity.swift */,
 				1DA9A741B605945E576B9C57 /* DeviceTransfers.swift */,
 				50DDEB6759BD6CF8EE219A29 /* Platform.swift */,
@@ -471,6 +475,7 @@
 				1B0876458C10A29DE5B12B7C /* AnnotationEditor.swift in Sources */,
 				FDD5C79E1E0062CE5F4B3915 /* AssistantPanel.swift in Sources */,
 				BB11598BB36080B000A7FF64 /* CrashReporter.swift in Sources */,
+				33B03227DE3AA32C4B7D19A1 /* DeveloperBuild.swift in Sources */,
 				CFD79D3FF739EE540F38072E /* DeviceIdentity.swift in Sources */,
 				3A61E0C7AE64AF94A195D5D8 /* DeviceTransfers.swift in Sources */,
 				504EACE05584958991444333 /* HorizontalPageView.swift in Sources */,
@@ -513,6 +518,7 @@
 				AE90E508896AB94665E6A0A3 /* AssistantPanel.swift in Sources */,
 				C536E7F8D29FC217B1278CA7 /* CrashReporter.swift in Sources */,
 				C5DFD97A6DC540BE65995EB2 /* DebugSnapshots.swift in Sources */,
+				79BE32C85F2C9358C33280D4 /* DeveloperBuild.swift in Sources */,
 				8FB46EBBEE43A08A4F6299EC /* DeviceIdentity.swift in Sources */,
 				38FE5386323D2AABA2E54F8C /* DeviceTransfers.swift in Sources */,
 				8F3C6AA501A224099675F7F5 /* InboxAutomation.swift in Sources */,
@@ -572,7 +578,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Mac/$(MAC_ENTITLEMENTS).entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Mac/Info.plist;
@@ -596,7 +602,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Mac/$(MAC_ENTITLEMENTS).entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Mac/Info.plist;
@@ -777,7 +783,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;
@@ -799,7 +805,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/Scriptorium.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Scriptorium;
