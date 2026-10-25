@@ -239,7 +239,7 @@ extension ReflowableView {
         /// The shell lives inside the book's content directory so chapters' relative resources resolve.
         func loadShell() {
             let shell = book.contentRoot.appending(path: ".scriptorium-shell.html")
-            try? Self.shellHTML(layout: layout).write(to: shell, atomically: true, encoding: .utf8)
+            try? Self.shellHTML(layout: layout, webArchive: book is WebArchiveSource).write(to: shell, atomically: true, encoding: .utf8)
             webView?.loadFileURL(shell, allowingReadAccessTo: book.contentRoot)
         }
 
@@ -442,10 +442,10 @@ extension ReflowableView {
 
         // MARK: Shell page
 
-        static func shellHTML(layout: ReflowLayout) -> String {
+        static func shellHTML(layout: ReflowLayout, webArchive: Bool = false) -> String {
             """
             <!DOCTYPE html>
-            <html class="\(layout.rawValue)"><head><meta charset="utf-8"/>
+            <html class="\(layout.rawValue)\(webArchive ? " webarchive" : "")"><head><meta charset="utf-8"/>
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
             <style id="reader-style">\(css)</style></head>
             <body><div id="book"></div></body></html>
@@ -453,7 +453,7 @@ extension ReflowableView {
         }
 
         static let css = """
-        :root { color-scheme: light dark; --scale: 1; --cols: 1; --ph: 44px; --pv: 40px;
+        :root { color-scheme: light dark; --scale: 1; --cols: 1; --ph: 44px; --pv: 40px; --pb: calc(var(--pv) + 24px);
                 --bg: #fffdf8; --fg: #1d1b18; --link: #2f5fb3; }
         @media (prefers-color-scheme: dark) { :root { --bg: #1c1b1a; --fg: #e9e5dc; --link: #8fb4ff; } }
         /* Dark mode: books and saved web pages often hard-code dark text (and light boxes); use the reader's
@@ -463,7 +463,7 @@ extension ReflowableView {
             background-color: transparent !important; border-color: rgba(233, 229, 220, 0.25) !important; }
           html .rchap a[href], html .rchap a[href] *:not(img) { color: var(--link) !important; }
         }
-        @media (max-width: 560px) { :root { --ph: 20px; --pv: 22px; } html { font-size: calc(18px * var(--scale)) !important; }
+        @media (max-width: 560px) { :root { --ph: 20px; --pv: 22px; --pb: calc(var(--pv) + 36px); } html { font-size: calc(18px * var(--scale)) !important; }
                                     html.scroll .rchap { padding: 18px 18px 8px; } }
         html { -webkit-text-size-adjust: none; font-size: calc(20px * var(--scale)) !important; background: var(--bg) !important; }
         body { margin: 0 !important; padding: 0 !important; max-width: none !important; background: var(--bg) !important;
@@ -485,13 +485,19 @@ extension ReflowableView {
 
         html.paged { height: 100vh; overflow-y: hidden; }
         html.paged body { height: 100vh; column-width: calc(100vw / var(--cols)); column-gap: 0; column-fill: auto; }
-        html.paged .rchap { break-before: column; box-sizing: border-box; padding: var(--pv) var(--ph);
+        /* --pb: room at the foot of every page (the page runs under the home indicator). */
+        html.paged .rchap { break-before: column; box-sizing: border-box; padding: var(--pv) var(--ph) var(--pb);
                             -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-        html.paged .rchap img, html.paged .rchap svg { max-height: calc(100vh - 2 * var(--pv) - 1.5em) !important;
+        html.paged .rchap img, html.paged .rchap svg { max-height: calc(100vh - var(--pv) - var(--pb) - 1.5em) !important;
                             width: auto; object-fit: contain; break-inside: avoid; }
 
         html.scroll .rchap { max-width: 38em; margin: 0 auto; padding: 28px 32px 8px; }
         html.scroll .rchap + .rchap { border-top: 1px solid rgba(127,127,127,.25); margin-top: 2.5em; padding-top: 2.5em; }
+        /* Saved web pages: a wider column, and the page's own width caps on its containers switched off. */
+        html.webarchive.scroll .rchap { max-width: 54em; padding-left: 24px; padding-right: 24px; }
+        html.webarchive .rchap :is(div, article, main, section, header, footer, figure, table, p, ul, ol, blockquote, pre) {
+            max-width: none !important; }
+        html.webarchive .rchap :is(article, main, section, div) { margin-left: 0 !important; margin-right: 0 !important; }
         html.scroll #book { padding-bottom: 40vh; }
         """
     }

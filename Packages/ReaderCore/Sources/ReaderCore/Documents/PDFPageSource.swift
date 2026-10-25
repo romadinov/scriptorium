@@ -65,6 +65,21 @@ public final class PDFPageSource: PageSource, @unchecked Sendable {
         return PageText(origin: .embedded, lines: lines)
     }
 
+    /// The page's text lines with where they are (normalised 0...1, origin top-left), straight from the PDF.
+    public func textLines(at index: Int) -> [(text: String, rect: CGRect)] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let page = worker.page(at: index) else { return [] }
+        let box = page.bounds(for: .mediaBox)
+        guard box.width > 0, box.height > 0, let all = page.selection(for: box) else { return [] }
+        return all.selectionsByLine().compactMap { line in
+            guard let text = line.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+            let r = line.bounds(for: page)
+            return (text, CGRect(x: (r.minX - box.minX) / box.width, y: (box.maxY - r.maxY) / box.height,
+                                 width: r.width / box.width, height: r.height / box.height))
+        }
+    }
+
     private func children(of node: PDFOutline) -> [OutlineItem] {
         (0..<node.numberOfChildren).compactMap { node.child(at: $0) }.map { child in
             let pageIndex = child.destination?.page.map { document.index(for: $0) }

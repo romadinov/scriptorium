@@ -82,6 +82,9 @@ private struct ReaderContent: View {
     var onViewAsText: (Bool) -> Void = { _ in }
     @Environment(SettingsStore.self) private var settings
     @Environment(DeviceTransfers.self) private var transfers
+    @Environment(LibraryStore.self) private var library
+    @Environment(\.dismiss) private var dismissReader
+    @State private var confirmDelete = false
     @State private var showAssistant = false
     @State private var showOutline = false
     @State private var showPagePicker = false
@@ -219,6 +222,16 @@ private struct ReaderContent: View {
         }) { target in
             AnnotationEditor(model: model, target: target)
         }
+        .confirmationDialog("Delete “\(model.book.title)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete Book", role: .destructive) {
+                model.readAloud.stop()
+                let url = model.book.url
+                dismissReader()
+                library.delete(url)
+            }
+        } message: {
+            Text("It's removed from this device. Highlights and bookmarks stay in iCloud.")
+        }
         .sheet(item: $model.taskDraft) { draft in
             TaskDraftSheet(draft: draft) { TaskAppSender.send($0) }
         }
@@ -320,6 +333,8 @@ private struct ReaderContent: View {
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
+                Divider()
+                Button("Delete Book…", systemImage: "trash", role: .destructive) { confirmDelete = true }
             }
         }
     }
@@ -406,6 +421,8 @@ private struct ReaderContent: View {
                 SendToMenu(book: model.book.url)
                 ReadingLinkActions(model: model)
                 Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); noteRequest.start(context: noteContext, file: noteFile) }
+                Divider()
+                Button("Delete Book…", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 if model.reflowable != nil && model.source.pageCount > 1 {
                     Section {
                         Button("Previous chapter", systemImage: "chevron.left") { model.go(to: model.currentPage - 1, remember: false) }

@@ -52,6 +52,8 @@ public enum PageLayoutRules {
     public static func isFormula(_ text: String) -> Bool {
         let chars = text.filter { !$0.isWhitespace }
         guard !chars.isEmpty else { return false }
+        // Section numbers ("1.1.1") and plain numbers are text, not formulas.
+        if text.range(of: #"^\s*[\d.]+\s*$"#, options: .regularExpression) != nil { return false }
         let math = chars.filter { mathSymbols.contains($0) }.count
         let words = text.split { !$0.isLetter }.filter { $0.count >= 4 }.count
         if chars.contains(where: { strongMath.contains($0) }) && words <= 3 { return true }
@@ -83,7 +85,8 @@ public enum PageLayoutRules {
     public static func layout(paragraphs: [Paragraph], figures inkFigures: [CGRect]) -> PageLayout {
         let heights = paragraphs.flatMap(\.lines).map(\.rect.height).sorted()
         let lineHeight = heights.isEmpty ? 0.02 : heights[heights.count / 2]
-        let figures = grow(inkFigures, with: paragraphs.flatMap(\.lines), lineHeight: lineHeight)
+        let allLines = paragraphs.flatMap(\.lines)
+        let figures = grow(inkFigures + diagramRows(allLines, lineHeight: lineHeight), with: allLines, lineHeight: lineHeight)
 
         // Text inside an illustration (labels, axes) belongs to the picture.
         func insideFigure(_ r: CGRect) -> Bool {
@@ -98,9 +101,22 @@ public enum PageLayoutRules {
             return (p.rect.minY < 0.06 || p.rect.maxY > 0.94) && text.count < 60
         }
 
+        // The text column's width: body lines span it, headings don't.
+        let widths = allLines.map(\.rect.width).sorted()
+        let column = widths.isEmpty ? 1 : widths[widths.count * 3 / 4]
+        func isHeading(_ line: Line, in p: Paragraph) -> Bool {
+            guard let i = p.lines.firstIndex(of: line), i + 1 < p.lines.count else { return false }
+            let previousEndsSentence = i == 0 || ".!?:".contains(p.lines[i - 1].text.last ?? ".")
+            let text = line.text.trimmingCharacters(in: .whitespaces)
+            return previousEndsSentence && text.count <= 70 && line.rect.width < column * 0.65
+                && !".,;:!?".contains(text.last ?? ".") && p.lines[i + 1].text.first?.isUppercase == true
+                && text.first.map { $0.isUppercase || $0.isNumber } == true
+        }
+
         var placed: [(y: CGFloat, block: PageLayout.Block)] = []
         for p in paragraphs where !insideFigure(p.rect) && !isMargin(p) {
             var pending: [Line] = []
+            var pendingNumber: Line?   // a bare section number ("1.1") waiting for its title
             func flush() {
                 guard !pending.isEmpty else { return }
                 let text = join(pending.map(\.text))
@@ -111,14 +127,28 @@ public enum PageLayoutRules {
                 placed.append((pending[0].rect.minY, heading ? .heading(text) : .paragraph(text)))
                 pending = []
             }
-            for line in p.lines {
-                if isFormula(line.text) {
+            for line in p.lines where !insideFigure(line.rect) {
+                let bareNumber = line.text.range(of: #"^\s*\d+(\.\d+)*\.?\s*$"#, options: .regularExpression) != nil
+                if bareNumber && line.text.count <= 8 {
+                    flush()
+                    pendingNumber = line
+                } else if let number = pendingNumber {
+                    // "1.1" + "Offensive Security" on the same row: one heading.
+                    pendingNumber = nil
+                    placed.append((number.rect.minY, .heading(number.text.trimmingCharacters(in: .whitespaces) + " " + line.text)))
+                } else if isFormula(line.text) {
                     flush()
                     placed.append((line.rect.minY, .formula(line.rect)))
+                } else if isHeading(line, in: p) {
+                    // A short line between sentence ends, followed by a new sentence: a heading Vision grouped
+                    // with the text around it.
+                    flush()
+                    placed.append((line.rect.minY, .heading(line.text)))
                 } else {
                     pending.append(line)
                 }
             }
+            if let number = pendingNumber { pending.append(number) }
             flush()
         }
         // Vision sometimes ends a paragraph at a line break mid-sentence: rejoin text that doesn't end one.
@@ -126,7 +156,15 @@ public enum PageLayoutRules {
         for item in placed {
             if case .paragraph(let next) = item.block, case .paragraph(let previous)? = joined.last?.block,
                let end = previous.last, !".!?:;…»\"”)".contains(end) {
-                joined[joined.count - 1].block = .paragraph(join([previous, next]))
+                // A short title-like line before a new sentence is a heading, not half a sentence.
+                let titleLike = previous.count <= 70 && next.first?.isUppercase == true
+                    && previous.first.map { $0.isUppercase || $0.isNumber } == true && !",".contains(end)
+                if titleLike {
+                    joined[joined.count - 1].block = .heading(previous)
+                    joined.append(item)
+                } else {
+                    joined[joined.count - 1].block = .paragraph(join([previous, next]))
+                }
             } else {
                 joined.append(item)
             }
@@ -150,6 +188,65 @@ public enum PageLayoutRules {
             }
         }
         return PageLayout(blocks: merged, lineHeight: lineHeight)
+    }
+
+    static func medianHeight(_ lines: [Line]) -> CGFloat {
+        let heights = lines.map(\.rect.height).sorted()
+        return heights.isEmpty ? 0.02 : heights[heights.count / 2]
+    }
+
+    /// A digital PDF's own lines, grouped into paragraphs the way Vision grouped what it saw: each line goes
+    /// to the Vision paragraph containing it; lines no paragraph contains stand alone, in page order.
+    public static func regroup(_ lines: [Line], by vision: [Paragraph]) -> [Paragraph] {
+        var buckets = Array(repeating: [Line](), count: vision.count)
+        var loose: [Line] = []
+        for line in lines {
+            let center = CGPoint(x: line.rect.midX, y: line.rect.midY)
+            if let i = vision.firstIndex(where: { $0.rect.insetBy(dx: -0.01, dy: -0.004).contains(center) }) {
+                buckets[i].append(line)
+            } else {
+                loose.append(line)
+            }
+        }
+        var result: [Paragraph] = []
+        for (i, bucket) in buckets.enumerated() where !bucket.isEmpty {
+            let sorted = bucket.sorted { abs($0.rect.minY - $1.rect.minY) < 0.004 ? $0.rect.minX < $1.rect.minX : $0.rect.minY < $1.rect.minY }
+            result.append(Paragraph(lines: sorted, rect: vision[i].rect))
+        }
+        for line in loose {
+            let index = result.firstIndex { $0.rect.minY > line.rect.minY } ?? result.count
+            result.insert(Paragraph(lines: [line], rect: line.rect), at: index)
+        }
+        return result
+    }
+
+    /// Box-and-arrow diagrams and tables: rows holding three or more short labels side by side. Each such
+    /// row (merged with adjacent ones) becomes a picture, so the labels aren't read out as a sentence.
+    static func diagramRows(_ lines: [Line], lineHeight: CGFloat) -> [CGRect] {
+        let short = lines.filter { $0.text.count <= 32 }
+        var rows: [[Line]] = []
+        for line in short.sorted(by: { $0.rect.midY < $1.rect.midY }) {
+            if let i = rows.firstIndex(where: { row in row.contains { abs($0.rect.midY - line.rect.midY) < lineHeight * 0.6 } }) {
+                rows[i].append(line)
+            } else {
+                rows.append([line])
+            }
+        }
+        var boxes: [CGRect] = []
+        for row in rows where row.count >= 3 {
+            let sorted = row.sorted { $0.rect.minX < $1.rect.minX }
+            // Separate cells, not one sentence broken into words: clear gaps between them.
+            let gaps = zip(sorted, sorted.dropFirst()).map { $1.rect.minX - $0.rect.maxX }
+            guard gaps.filter({ $0 > 0.02 }).count >= 2 else { continue }
+            let box = row.map(\.rect).reduce(row[0].rect) { $0.union($1) }
+            if let i = boxes.firstIndex(where: { max($0.minY, box.minY) - min($0.maxY, box.maxY) < lineHeight * 1.5 }) {
+                boxes[i] = boxes[i].union(box)
+            } else {
+                boxes.append(box)
+            }
+        }
+        // A little room for the boxes' borders and arrows around the labels.
+        return boxes.map { $0.insetBy(dx: -0.02, dy: -lineHeight * 0.8) }
     }
 
     /// Diagrams come with labels and symbol-only lines (tape cells, axis marks) that OCR turns into noise:

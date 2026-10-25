@@ -725,6 +725,33 @@ final class ReaderFlowTests: XCTestCase {
             .waitForExistence(timeout: 10), "No Inbox confirmation")
     }
 
+    /// iPhone: a page in page layout keeps a gap at the foot (screenshot), and a book can be deleted from inside it.
+    func testFooterGapAndDeleteFromReader() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone only")
+        openFolder("Fiction")
+        open(bookMatching: "Pride and Prejudice, EPUB")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15))
+        sleep(3)
+        snap("footer-1-paged")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
+        app.buttons["More"].tap()
+        let delete = app.buttons["Delete Book…"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5), "No Delete Book in the reader")
+        delete.tap()
+        let confirm = app.buttons["Delete Book"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No confirmation")
+        snap("delete-1-confirm")
+        confirm.tap()
+        XCTAssertTrue(app.navigationBars["Physics"].waitForExistence(timeout: 5), "Didn't go back to the folder")
+        let gone = NSPredicate(format: "label CONTAINS 'Thermodynamics, PDF'")
+        XCTAssertFalse(app.buttons.matching(gone).firstMatch.waitForExistence(timeout: 2), "Book still listed")
+    }
+
     /// A saved web page with hard-coded dark text stays readable in dark mode (screenshot check).
     func testWebArchiveInDarkMode() throws {
         let book = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Dark Text'")).firstMatch

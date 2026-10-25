@@ -17,32 +17,32 @@ public enum PageReflower {
         request.textRecognitionOptions.useLanguageCorrection = true
         let documents = try await request.perform(on: image)
 
-        // A digital PDF's own text beats OCR: Vision gives the layout, the file gives the words. (DjVu text
-        // layers are often coarse or misaligned, so those stay with Vision.)
-        let embedded = source is PDFPageSource
-            ? source.embeddedText(at: index).flatMap { $0.origin == .embedded ? $0.lines.flatMap { $0 } : nil } ?? [] : []
-        func text(in rect: CGRect, fallback: String) -> String {
-            guard !embedded.isEmpty else { return fallback }
-            let words = embedded.filter { $0.rect.height < rect.height * 2 && rect.contains(CGPoint(x: $0.rect.midX, y: $0.rect.midY)) }
-                .sorted { $0.rect.minX < $1.rect.minX }
-            return words.isEmpty ? fallback : words.map(\.text).joined(separator: " ")
-        }
+        // A digital PDF's own lines (exact text, exact position) beat OCR: Vision only says which lines form a
+        // paragraph. Scans and DjVus (often garbled text layers) use Vision's reading.
+        var pdfLines = (source as? PDFPageSource)?.textLines(at: index) ?? []
+        // An embedded picture shows up in the text as U+FFFC, with the picture's bounds.
+        let pdfImages = pdfLines.filter { $0.text.unicodeScalars.allSatisfy { $0 == "\u{FFFC}" || $0 == " " } }.map(\.rect)
+        pdfLines.removeAll { $0.text.unicodeScalars.allSatisfy { $0 == "\u{FFFC}" || $0 == " " } }
         var paragraphs: [PageLayoutRules.Paragraph] = []
         var tables: [CGRect] = []
         for document in documents {
             let container = document.document
             for paragraph in container.paragraphs {
                 let lines = paragraph.lines.map { line in
-                    let rect = topLeft(line.boundingBox.cgRect)
-                    return PageLayoutRules.Line(text: text(in: rect, fallback: line.topCandidates(1).first?.string ?? ""), rect: rect)
+                    PageLayoutRules.Line(text: line.topCandidates(1).first?.string ?? "", rect: topLeft(line.boundingBox.cgRect))
                 }.filter { !$0.text.isEmpty }
                 if !lines.isEmpty { paragraphs.append(.init(lines: lines, rect: topLeft(paragraph.boundingRegion.boundingBox.cgRect))) }
             }
             // Tables keep their grid: crop them like pictures.
             tables += container.tables.map { topLeft($0.boundingRegion.boundingBox.cgRect) }
         }
+        // Diagram labels drawn inside pictures are only in what Vision read, not in the PDF's text.
+        let visionLines = paragraphs.flatMap(\.lines)
+        let labelRows = PageLayoutRules.diagramRows(visionLines, lineHeight: PageLayoutRules.medianHeight(visionLines))
+        if !pdfLines.isEmpty { paragraphs = PageLayoutRules.regroup(pdfLines.map { .init(text: $0.text, rect: $0.rect) }, by: paragraphs) }
         let textRects = paragraphs.flatMap(\.lines).map(\.rect)
-        let figures = figureRegions(in: image, excluding: textRects) + tables
+        let figures = figureRegions(in: image, excluding: textRects) + tables + labelRows
+            + pdfImages.map { $0.insetBy(dx: -0.005, dy: -0.01) }
         let layout = PageLayoutRules.layout(paragraphs: paragraphs.filter { p in
             !tables.contains { $0.intersects(p.rect) }
         }, figures: figures)
@@ -68,14 +68,17 @@ public enum PageReflower {
 
     /// Marked areas of the page that aren't text: drawings, photos, diagrams.
     static func figureRegions(in image: CGImage, excluding text: [CGRect]) -> [CGRect] {
-        let cols = 240, rows = max(1, Int(Double(cols) * Double(image.height) / Double(image.width)))
+        let cols = 480, rows = max(1, Int(Double(cols) * Double(image.height) / Double(image.width)))
         var pixels = [UInt8](repeating: 255, count: cols * rows)
         guard let context = CGContext(data: &pixels, width: cols, height: rows, bitsPerComponent: 8, bytesPerRow: cols,
                                       space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return [] }
         context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: cols, height: rows))
         // Row 0 of the buffer is the top of the page.
-        var ink = (0..<rows).map { r in (0..<cols).map { c in pixels[r * cols + c] < 200 } }
+        // Ink is anything clearly darker than the paper (scans aren't white; pale diagram fills count too).
+        let paper = Int(pixels.sorted()[pixels.count * 3 / 4])
+        let threshold = UInt8(max(0, min(paper - 18, 235)))
+        var ink = (0..<rows).map { r in (0..<cols).map { c in pixels[r * cols + c] < threshold } }
         // Ignore scan borders and the text itself (slightly padded).
         let margin = 0.02
         for r in 0..<rows {
@@ -86,7 +89,7 @@ public enum PageReflower {
                 if text.contains(where: { $0.insetBy(dx: -0.004, dy: -0.004).contains(point) }) { ink[r][c] = false }
             }
         }
-        return PageLayoutRules.figureBoxes(ink: ink)
+        return PageLayoutRules.figureBoxes(ink: ink, gap: 4)
     }
 
     static func crop(_ image: CGImage, _ r: CGRect) -> CGImage {
