@@ -11,10 +11,18 @@ public final class ReflowedSource: ReflowableSource, @unchecked Sendable {
     public var outline: [OutlineItem] { original.outline }
     public var chapterTitles: [String] { (0..<pageCount).map { "Page \($0 + 1)" } }
 
+    /// Bumped when conversion improves, so pages converted by older code are converted again.
+    static let converterVersion = "2"
+
     public init(original: PageSource) {
         self.original = original
         contentRoot = Self.directory(for: original.url)
+        let version = contentRoot.appending(path: ".converter-version")
+        if (try? String(contentsOf: version, encoding: .utf8)) != Self.converterVersion {
+            try? FileManager.default.removeItem(at: contentRoot)
+        }
         try? FileManager.default.createDirectory(at: contentRoot, withIntermediateDirectories: true)
+        try? Self.converterVersion.write(to: version, atomically: true, encoding: .utf8)
     }
 
     public static func directory(for book: URL) -> URL { BookCache.directory(for: book, kind: "Reflowed") }
