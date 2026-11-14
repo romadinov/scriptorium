@@ -208,6 +208,18 @@ extension ReflowableView {
                     await self.replace(with: chapter, progress: self.model.currentPage == chapter ? self.model.pageProgress : 0)
                 }
             }
+            #if os(macOS)
+            model.webPrintOperation = { [weak self] in
+                guard let webView = self?.webView else { return nil }
+                let info = NSPrintInfo.shared.copy() as! NSPrintInfo
+                info.horizontalPagination = .fit
+                info.verticalPagination = .automatic
+                info.isVerticallyCentered = false
+                let operation = webView.printOperation(with: info)
+                operation.view?.frame = webView.bounds
+                return operation
+            }
+            #endif
             model.findQuote = { [weak self] quote, chapter in
                 guard let self else { return false }
                 if !(await self.isLoaded(chapter)) { await self.replace(with: chapter, progress: 0) }
@@ -232,6 +244,9 @@ extension ReflowableView {
             model.revealHighlight = nil
             model.findQuote = nil
             model.reloadChapter = nil
+            #if os(macOS)
+            model.webPrintOperation = nil
+            #endif
         }
 
         // MARK: Loading
@@ -248,8 +263,8 @@ extension ReflowableView {
             ready = true
             Task {
                 _ = try? await webView.callAsyncJavaScript(
-                    "reader.configure({layout: layout, total: total, scale: scale})",
-                    arguments: ["layout": layout.rawValue, "total": book.pageCount, "scale": fontScale],
+                    "reader.configure({layout: layout, total: total, scale: scale, zoomImages: zoom})",
+                    arguments: ["layout": layout.rawValue, "total": book.pageCount, "scale": fontScale, "zoom": Self.zoomsImages],
                     contentWorld: .page)
                 await replace(with: model.currentPage, progress: model.startProgress)
                 syncedHighlights = []
@@ -392,6 +407,12 @@ extension ReflowableView {
         }
         #endif
 
+        #if os(macOS)
+        static let zoomsImages = false
+        #else
+        static let zoomsImages = true
+        #endif
+
         // MARK: Messages from the page
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -417,6 +438,8 @@ extension ReflowableView {
                    let highlight = model.highlights.first(where: { $0.id == id }) {
                     model.tappedHighlight = highlight
                 }
+            case "image":
+                if let url = (body["src"] as? String).flatMap(URL.init(string:)), url.isFileURL { model.zoomedImage = url }
             case "contextLink":
                 #if os(macOS)
                 lastContextLink = (body["href"] as? String).flatMap(URL.init(string:))
@@ -499,6 +522,17 @@ extension ReflowableView {
             max-width: none !important; }
         html.webarchive .rchap :is(article, main, section, div) { margin-left: 0 !important; margin-right: 0 !important; }
         html.scroll #book { padding-bottom: 40vh; }
+        /* Printing (Mac): dark text on white paper, one flowing column, no screen-sized pages. */
+        @media print {
+          :root { --bg: #fff; --fg: #000; --link: #000; }
+          .rchap, .rchap *:not(mark):not(img):not(svg):not(svg *) { color: #000 !important; }
+          html, html.paged, html.paged body { height: auto !important; overflow: visible !important; }
+          html.paged body { column-width: auto !important; columns: auto !important; }
+          .rchap, html.paged .rchap, html.scroll .rchap { max-width: none !important; margin: 0 !important; padding: 0 !important;
+                  border: none !important; break-before: auto; }
+          .rchap img, .rchap svg, html.paged .rchap img { max-height: 9in !important; break-inside: avoid; }
+          #book { padding: 0 !important; }
+        }
         """
     }
 

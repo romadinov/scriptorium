@@ -10,6 +10,9 @@ public struct PageLayout: Equatable, Sendable {
         /// Cropped from the page: a display formula (sized with the text) or an illustration (sized with the page).
         case formula(CGRect)
         case figure(CGRect)
+        /// Program code or JSON, cropped as printed (sized with the text): recognised text would lose its
+        /// indentation, quotes and brackets.
+        case code(CGRect)
     }
 
     public var blocks: [Block]
@@ -65,6 +68,46 @@ public enum PageLayoutRules {
         return Double(math) / Double(chars.count) >= 0.18 && words <= 2 && chars.count <= 120
     }
 
+    private static let stopWords: Set<String> = ["the", "a", "an", "of", "and", "to", "is", "are", "in", "that", "with",
+                                                 "this", "it", "as", "be", "by", "on", "we", "you", "can", "which", "will"]
+
+    /// How a line reads as program code or JSON: `.strong` lines start a code block, `.weak` lines (comments,
+    /// closing brackets, continuation lines) only continue one.
+    public enum CodeLikeness: Equatable, Sendable { case none, weak, strong }
+
+    public static func codeLikeness(_ text: String) -> CodeLikeness {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return .none }
+        func matches(_ pattern: String) -> Bool { t.range(of: pattern, options: .regularExpression) != nil }
+        // JSON members and lone brackets.
+        if matches(#"^[\[\]{}(),;]+$"#) { return .strong }
+        if matches(#"^[\[{]?\s*["'][^"']{1,60}["']\s*:\s*([\[{"'\d-]|true|false|null)"#) { return .strong }
+        let words = t.lowercased().split { !$0.isLetter }
+        let prose = words.filter { stopWords.contains(String($0)) }.count
+        // Comments and prompts, prose-free continuation lines: only inside a block.
+        let weak = matches(#"^(#|//|/\*|\*|--|>>>|\.\.\.|\$ )"#)
+            || (prose <= 1 && matches(#"[,(\[{:\\]$|^[)\]}]"#))
+        guard prose <= 2 else { return weak ? .weak : .none }
+        let strong = [
+            #"^(import|from|def|class|fn|func|function|const|let|var|val|public|private|return|async|await|package|#include|using|pip|npm|curl|brew|git|docker|python3?|export|SELECT|INSERT|UPDATE|CREATE)\s+\S+.*([({:;=\]]|\s\S+\s)"#,
+            #"^(if|for|while|elif|with|try|except|else|catch|switch)\b.*[:{]$"#,
+            #"\w+\.\w+\s*\("#,                       // client.chat.create(
+            // x = f(…), self.a[0] += "…" (not "S = k log W", which is a formula)
+            #"^\w+(\.\w+|\[[^\]]*\])*\s*(=|\+=|-=|:=)\s*([\w.]+\(|["'\[{]|\d|\w+\.\w|True\b|False\b|None\b|null\b|new\s)"#,
+            #"^(import|pip|pip3|npm|brew|git|curl|docker|python3?|cd|export|uv|conda)\s+[\w.@/=-]+(\s|$)"#,
+            #"^from\s+[\w.]+\s+import\b"#,
+            #"^\w+(\.\w+|\[[^\]]*\])+\s*(=|\+=|-=)\s*\S"#,       // os.environ['KEY'] = KEY
+            #"(==|!=|=>|->|::|&&|\|\|)"#,
+            #";\s*$"#,
+            #"\{\s*$"#,
+            #"^@\w+"#,                                  // decorators
+            #"^\w+\(.*\)\s*[:;]?$"#,                    // print(x)
+            #"\b[a-z]+_[a-z_]+\b.*[=(]"#,               // snake_case with a call or assignment
+        ]
+        if strong.contains(where: matches) && !(t.hasSuffix(".") && prose > 0) { return .strong }
+        return weak ? .weak : .none
+    }
+
     /// Joins a paragraph's lines, undoing end-of-line hyphenation ("con-" + "cept" → "concept").
     public static func join(_ lines: [String]) -> String {
         var text = ""
@@ -86,7 +129,36 @@ public enum PageLayoutRules {
         let heights = paragraphs.flatMap(\.lines).map(\.rect.height).sorted()
         let lineHeight = heights.isEmpty ? 0.02 : heights[heights.count / 2]
         let allLines = paragraphs.flatMap(\.lines)
-        let figures = grow(inkFigures + diagramRows(allLines, lineHeight: lineHeight), with: allLines, lineHeight: lineHeight)
+        // Program code and JSON first: a listing's shaded box or header bar also looks like a picture.
+        var codeBlocks = codeRegions(allLines, lineHeight: lineHeight)
+        // Shapes that are part of a listing (its shaded box, the header bar right above it) join the code image.
+        func partOfListing(_ f: CGRect, _ c: CGRect) -> Bool {
+            let i = c.intersection(f)
+            if !i.isNull && (i.width * i.height >= 0.25 * f.width * f.height || i.width * i.height >= 0.5 * c.width * c.height) { return true }
+            let overlapX = min(f.maxX, c.maxX) - max(f.minX, c.minX)
+            let gap = max(c.minY - f.maxY, f.minY - c.maxY)
+            return overlapX >= 0.7 * min(f.width, c.width) && gap < lineHeight * 2.5 && f.height < lineHeight * 5
+        }
+        var shapes: [CGRect] = []
+        for f in inkFigures {
+            if let k = codeBlocks.firstIndex(where: { partOfListing(f, $0) }) { codeBlocks[k] = codeBlocks[k].union(f) } else { shapes.append(f) }
+        }
+        var pictures: [CGRect] = []
+        let freeLines = allLines.filter { line in !codeBlocks.contains { $0.intersects(line.rect) } }
+        for f in grow(shapes + diagramRows(freeLines, lineHeight: lineHeight), with: freeLines, lineHeight: lineHeight) {
+            if let k = codeBlocks.firstIndex(where: { c in
+                let i = c.intersection(f)
+                return !i.isNull && i.width * i.height >= 0.25 * f.width * f.height
+            }) {
+                codeBlocks[k] = codeBlocks[k].union(f)
+            } else {
+                pictures.append(f)
+            }
+        }
+        let figures = pictures
+        func codeBlock(of line: Line) -> Int? {
+            codeBlocks.firstIndex { $0.contains(CGPoint(x: line.rect.midX, y: line.rect.midY)) }
+        }
 
         // Text inside an illustration (labels, axes) belongs to the picture.
         func insideFigure(_ r: CGRect) -> Bool {
@@ -114,7 +186,10 @@ public enum PageLayoutRules {
         }
 
         var placed: [(y: CGFloat, block: PageLayout.Block)] = []
-        for p in paragraphs where !insideFigure(p.rect) && !isMargin(p) {
+        var placedCode = Set<Int>()
+
+        for p in paragraphs where !isMargin(p) || p.lines.contains(where: { codeBlock(of: $0) != nil }) {
+            if insideFigure(p.rect) { continue }
             var pending: [Line] = []
             var pendingNumber: Line?   // a bare section number ("1.1") waiting for its title
             func flush() {
@@ -128,6 +203,12 @@ public enum PageLayoutRules {
                 pending = []
             }
             for line in p.lines where !insideFigure(line.rect) {
+                if let block = codeBlock(of: line) {
+                    // The whole block goes where its first line is met.
+                    flush()
+                    if placedCode.insert(block).inserted { placed.append((codeBlocks[block].minY, .code(codeBlocks[block]))) }
+                    continue
+                }
                 let bareNumber = line.text.range(of: #"^\s*\d+(\.\d+)*\.?\s*$"#, options: .regularExpression) != nil
                 if bareNumber && line.text.count <= 8 {
                     flush()
@@ -188,6 +269,49 @@ public enum PageLayoutRules {
             }
         }
         return PageLayout(blocks: merged, lineHeight: lineHeight)
+    }
+
+    /// Where code listings are: blocks grown from strong code lines over nearby code-like lines (blank lines in
+    /// a listing allowed), then over every fragment in their rows (PDF text splits `{"role": "user"}` into pieces).
+    static func codeRegions(_ lines: [Line], lineHeight: CGFloat) -> [CGRect] {
+        let likeness = lines.map { codeLikeness($0.text) }
+        var blocks: [CGRect] = []
+        for (i, line) in lines.enumerated() where likeness[i] == .strong && !blocks.contains(where: { $0.intersects(line.rect) }) {
+            var block = line.rect
+            var changed = true
+            while changed {
+                changed = false
+                for (j, other) in lines.enumerated() where !block.contains(other.rect) {
+                    let overlapsX = other.rect.maxX > block.minX && other.rect.minX < block.maxX
+                    let gap = max(other.rect.minY - block.maxY, block.minY - other.rect.maxY)
+                    let inRow = other.rect.midY > block.minY && other.rect.midY < block.maxY
+                    if inRow || (likeness[j] != .none && overlapsX && gap < lineHeight * 2.8) {
+                        block = block.union(other.rect)
+                        changed = true
+                    }
+                }
+            }
+            blocks.append(block)
+        }
+        // Blocks that touch (one listing found from two places), or with only prose-free lines between them
+        // (a code line split into unrecognisable pieces), become one.
+        func proseFreeGap(_ a: CGRect, _ b: CGRect) -> Bool {
+            guard b.minY - a.maxY < lineHeight * 5 else { return false }
+            return lines.filter { $0.rect.midY > a.maxY && $0.rect.midY < b.minY }.allSatisfy { line in
+                let words = line.text.lowercased().split { !$0.isLetter }
+                return words.filter { stopWords.contains(String($0)) }.count <= 1 && !line.text.hasSuffix(".")
+            }
+        }
+        var merged: [CGRect] = []
+        for block in blocks.sorted(by: { $0.minY < $1.minY }) {
+            if let last = merged.last, block.maxX > last.minX, block.minX < last.maxX,
+               block.minY - last.maxY < lineHeight * 0.5 || proseFreeGap(last, block) {
+                merged[merged.count - 1] = last.union(block)
+            } else {
+                merged.append(block)
+            }
+        }
+        return merged
     }
 
     static func medianHeight(_ lines: [Line]) -> CGFloat {
@@ -333,6 +457,10 @@ public enum PageLayoutRules {
                 // Height in em, so the formula grows and shrinks with the text size.
                 let em = max(1.0, Double((r.height + layout.lineHeight * 1.2) / max(layout.lineHeight, 0.001)) * 0.9)
                 body += "<div class=\"formula\"><img src=\"\(image(i))\" alt=\"formula\" style=\"height: \(String(format: "%.2f", em))em\"/></div>\n"
+            case .code(let r):
+                // Sized with the text like a formula; narrow screens scale it down (tap to zoom).
+                let em = max(1.0, Double((r.height + layout.lineHeight * 0.8) / max(layout.lineHeight, 0.001)) * 0.9)
+                body += "<div class=\"code\"><img src=\"\(image(i))\" alt=\"code\" style=\"height: \(String(format: "%.2f", em))em\"/></div>\n"
             case .figure(let r):
                 let width = min(100, Int((r.width * 100 * 1.1).rounded()))
                 body += "<figure><img src=\"\(image(i))\" alt=\"illustration\" style=\"width: \(width)%\"/></figure>\n"
@@ -344,9 +472,11 @@ public enum PageLayoutRules {
         <style>
         .formula { text-align: center; margin: 0.6em 0; }
         .formula img { max-width: 100%; object-fit: contain; vertical-align: middle; }
+        .code { text-align: left; margin: 0.6em 0; }
+        .code img { max-width: 100%; object-fit: contain; object-position: left; }
         figure { margin: 1em 0; text-align: center; }
         figure img { max-width: 100%; height: auto; }
-        @media (prefers-color-scheme: dark) { .formula img, figure img { filter: invert(1) hue-rotate(180deg); } }
+        @media (prefers-color-scheme: dark) { .formula img, .code img, figure img { filter: invert(1) hue-rotate(180deg); } }
         </style></head>
         <body>
         \(body)</body></html>

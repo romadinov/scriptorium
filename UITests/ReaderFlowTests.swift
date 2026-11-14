@@ -786,29 +786,70 @@ final class ReaderFlowTests: XCTestCase {
         }
     }
 
-    /// Text size: in the toolbar's Text Size & Layout menu (iPad) or More (iPhone); tapping Larger enlarges the text.
-    func testTextSizeControls() throws {
+    /// Text size and theme: a panel from the toolbar (iPad: Text Size & Layout; iPhone: More › Text Size & Theme…)
+    /// with a slider and Auto / Light / Dark.
+    func testTextSizeAndTheme() throws {
         openFolder("Fiction")
         open(bookMatching: "Pride and Prejudice, EPUB")
         let indicator = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chapter '")).firstMatch
         XCTAssertTrue(indicator.waitForExistence(timeout: 20))
         sleep(2)
-        snap("textsize-1-default")
-        let menu = UIDevice.current.userInterfaceIdiom == .phone ? app.buttons["More"] : app.buttons["Text Size & Layout"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 5), "No text size menu")
-        menu.tap()
-        let larger = app.buttons["Larger Text"]
-        XCTAssertTrue(larger.waitForExistence(timeout: 5), "No Larger Text control")
-        let sizeButton = app.buttons.matching(NSPredicate(format: "label MATCHES '[0-9]+%'")).firstMatch
-        let before = Int(sizeButton.label.dropLast()) ?? 0
-        snap("textsize-2-menu")
-        larger.tap()
+        let phone = UIDevice.current.userInterfaceIdiom == .phone
+        func openPanel() {
+            if phone {
+                app.buttons["More"].tap()
+                sleep(1)
+                XCTAssertTrue(app.buttons["Text Size & Theme…"].waitForExistence(timeout: 5), "No Text Size & Theme…")
+                app.buttons["Text Size & Theme…"].tap()
+            } else {
+                app.buttons["Text Size & Layout"].tap()
+            }
+        }
+        openPanel()
+        let slider = app.sliders["textSize.slider"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 5), "No text size slider")
+        let size = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Text size '")).firstMatch
+        let before = size.label
+        slider.adjust(toNormalizedSliderPosition: 0.45)
+        sleep(1)
+        XCTAssertNotEqual(size.label, before, "Slider didn't change the size")
+        snap("appearance-1-slider")
+        app.buttons["Dark"].tap()
         sleep(2)
-        snap("textsize-3-larger")
-        menu.tap()
-        XCTAssertTrue(sizeButton.waitForExistence(timeout: 5))
-        XCTAssertEqual(Int(sizeButton.label.dropLast()), before + 10, "Larger didn't add 10%")
-        sizeButton.tap()   // back to 100%
+        snap("appearance-2-dark")
+        app.buttons["Light"].tap()
+        sleep(2)
+        snap("appearance-3-light")
+        app.buttons["Auto"].tap()
+        size.tap()   // back to 100%
+        XCTAssertTrue(size.label.contains("100%"))
+    }
+
+    /// iPhone: in a PDF viewed as text, tapping a picture opens it full screen (zoomable); Done closes it.
+    func testPictureZoomInViewAsText() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone")
+        openFolder("Physics")
+        open(bookMatching: "Thermodynamics, PDF")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15))
+        sleep(1)
+        app.buttons["More"].tap()
+        XCTAssertTrue(app.buttons["View as Text"].waitForExistence(timeout: 5))
+        app.buttons["View as Text"].tap()
+        let picture = app.webViews.images.firstMatch
+        XCTAssertTrue(picture.waitForExistence(timeout: 40), "No picture in the converted text")
+        sleep(2)
+        snap("zoom-1-text")
+        picture.tap()
+        let zoomed = app.descendants(matching: .any)["zoomedImage"]
+        XCTAssertTrue(zoomed.waitForExistence(timeout: 5), "Picture didn't open full screen")
+        zoomed.pinch(withScale: 2.5, velocity: 2)
+        snap("zoom-2-full-screen")
+        app.buttons["zoomedImage.close"].tap()
+        XCTAssertTrue(picture.waitForExistence(timeout: 5))
+        app.buttons["More"].tap()
+        app.buttons["Text Size & Theme…"].tap()
+        XCTAssertTrue(app.buttons["View Original Pages"].waitForExistence(timeout: 5))
+        app.buttons["View Original Pages"].tap()
     }
 
     /// A link with a quote lands on the passage and selects it. The links (with the seeded books' fingerprints)

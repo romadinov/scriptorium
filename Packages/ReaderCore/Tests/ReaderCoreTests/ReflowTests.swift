@@ -15,6 +15,42 @@ import Testing
         #expect(!Rules.isFormula("The second law of thermodynamics states that the total entropy"))
     }
 
+    @Test func recognisesCodeAndJSON() {
+        for line in ["{", "\"model\": \"gpt-4o\",", "  \"temperature\": 0.2,", "import json",
+                     "from openai import OpenAI", "response = client.chat.completions.create(",
+                     "def run_agent(query: str) -> str:", "for step in plan.steps:", "print(result)",
+                     "const agent = new Agent({", "@tool", "pip install dspy"] {
+            #expect(Rules.codeLikeness(line) == .strong, "\(line)")
+        }
+        for line in ["# Load the documents", ")", "    messages=messages,"] {
+            #expect(Rules.codeLikeness(line) != .none, "\(line)")
+        }
+        for line in ["The agent calls the tool and returns the result to the user.",
+                     "In this chapter, we build an agent that can plan (and re-plan) its steps.",
+                     "For example, the model is asked to reason about the problem first.",
+                     "Listing 2.1 Calling the model", "1.2 Why agents?",
+                     "return the answer to the user when it is ready, which is what we want."] {
+            #expect(Rules.codeLikeness(line) != .strong, "\(line)")
+        }
+    }
+
+    @Test func layoutCropsCodeBlocks() {
+        func line(_ t: String, y: CGFloat, x: CGFloat = 0.1) -> Rules.Line { .init(text: t, rect: CGRect(x: x, y: y, width: 0.6, height: 0.02)) }
+        let lines = [line("We send the request like this:", y: 0.10),
+                     line("response = client.chat.completions.create(", y: 0.13, x: 0.12),
+                     line("    model=\"gpt-4o\",", y: 0.16, x: 0.12),
+                     line(")", y: 0.19, x: 0.12),
+                     line("The reply comes back as JSON.", y: 0.23)]
+        let layout = Rules.layout(paragraphs: [Rules.Paragraph(lines: lines, rect: CGRect(x: 0.1, y: 0.1, width: 0.62, height: 0.15))], figures: [])
+        guard layout.blocks.count == 3, case .code(let r) = layout.blocks[1] else {
+            Issue.record("\(layout.blocks)"); return
+        }
+        #expect(layout.blocks[0] == .paragraph("We send the request like this:"))
+        #expect(layout.blocks[2] == .paragraph("The reply comes back as JSON."))
+        #expect(abs(r.minY - 0.13) < 0.001 && abs(r.maxY - 0.21) < 0.001)
+        #expect(Rules.xhtml(layout, title: "p") { "i\($0).png" }.contains("class=\"code\""))
+    }
+
     @Test func joinsLinesAndUndoesHyphenation() {
         #expect(Rules.join(["The con-", "cept of en-", "tropy is", "well-", "Known"]) == "The concept of entropy is well- Known")
     }

@@ -93,6 +93,8 @@ private struct ReaderContent: View {
     @AppStorage("fontScale") private var fontScale = 1.0
     @AppStorage("reflowLayout") private var layout: ReflowLayout = .paged
     @AppStorage("pageTurning") private var turning: PageTurning = .horizontal
+    @AppStorage("readerTheme") private var theme: ReaderTheme = .system
+    @State private var showAppearance = false
     @State private var showHighlights = false
     @State private var confirmRemovePageNote = false
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -175,6 +177,13 @@ private struct ReaderContent: View {
         .toolbar {
             if compact { compactToolbar } else { toolbar }
         }
+        .preferredColorScheme(theme.colorScheme)
+        .sheet(isPresented: compactOnly($showAppearance)) {
+            appearancePanel.padding(20).presentationDetents([.height(model.reflowable != nil ? 330 : 140)])
+        }
+        .fullScreenCover(isPresented: Binding(get: { model.zoomedImage != nil }, set: { if !$0 { model.zoomedImage = nil } })) {
+            if let url = model.zoomedImage { ZoomedImageView(url: url) { model.zoomedImage = nil } }
+        }
         .sheet(isPresented: compactOnly($showOutline)) { bookIndex(.contents) }
         .sheet(isPresented: compactOnly($showPagePicker)) {
             PagePicker(model: model, onDone: { showPagePicker = false }).padding().presentationDetents([.height(260)])
@@ -249,7 +258,7 @@ private struct ReaderContent: View {
                 .id(effectiveLayout)
                 // Pinch to change the text size (applied when the pinch ends, so the text reflows once).
                 .simultaneousGesture(MagnifyGesture().onEnded { value in
-                    fontScale = TextSizeControls.clamp(fontScale * value.magnification)
+                    fontScale = TextSize.clamp(fontScale * value.magnification)
                     model.statusMessage = "Text size \(Int((fontScale * 100).rounded()))%"
                 })
         } else if model.imageMode || model.pdfDocument == nil {
@@ -285,21 +294,15 @@ private struct ReaderContent: View {
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             if model.reflowable != nil {
-                Menu("Text Size & Layout", systemImage: "textformat.size") {
-                    TextSizeControls(fontScale: $fontScale)
-                    if model.isViewingAsText {
-                        Button("View Original Pages", systemImage: "doc.richtext") { onViewAsText(false) }
-                    }
-                    if !(model.source is WebArchiveSource) {
-                        Picker("Layout", selection: $layout) {
-                            ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
-                        }
-                    }
-                }
+                Button("Text Size & Layout", systemImage: "textformat.size") { showAppearance = true }
+                    .popover(isPresented: $showAppearance) { appearancePanel.padding(20).frame(width: 340) }
             } else {
                 Menu("Page layout", systemImage: turning.systemImage) {
                     Picker("Page turning", selection: $turning) {
                         ForEach(PageTurning.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                    }
+                    Picker("Theme", selection: $theme) {
+                        ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                     }
                 }
                 Menu("Text", systemImage: "text.viewfinder") {
@@ -436,18 +439,13 @@ private struct ReaderContent: View {
                     }
                 }
                 if model.reflowable != nil {
-                    if model.isViewingAsText {
-                        Button("View Original Pages", systemImage: "doc.richtext") { onViewAsText(false) }
-                    }
-                    if !(model.source is WebArchiveSource) {
-                        Picker("Layout", selection: $layout) {
-                            ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
-                        }
-                    }
-                    TextSizeControls(fontScale: $fontScale)
+                    Button("Text Size & Theme…", systemImage: "textformat.size") { showAppearance = true }
                 } else {
                     Picker("Page turning", selection: $turning) {
                         ForEach(PageTurning.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                    }
+                    Picker("Theme", selection: $theme) {
+                        ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                     }
                     Section("Text recognition") {
                         if model.canViewAsText {
@@ -460,6 +458,25 @@ private struct ReaderContent: View {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Text size slider, theme, and (text books) layout and the way back to the original pages.
+    private var appearancePanel: some View {
+        ReaderAppearancePanel(fontScale: $fontScale, theme: $theme, showsTextSize: model.reflowable != nil) {
+            if model.reflowable != nil && !(model.source is WebArchiveSource) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Layout").font(.subheadline.weight(.semibold))
+                    Picker("Layout", selection: $layout) {
+                        ForEach(ReflowLayout.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+            }
+            if model.isViewingAsText {
+                Button("View Original Pages", systemImage: "doc.richtext") { showAppearance = false; onViewAsText(false) }
             }
         }
     }
@@ -713,22 +730,6 @@ private struct ReadingLinkActions: View {
                 Button("Send to \(TaskAppLink.appName)", systemImage: "checklist") { model.taskDraft = TaskAppSender.draft(model) }
             }
         }
-    }
-}
-
-/// Smaller / size (tap to reset) / Larger, side by side at the top of the menu.
-private struct TextSizeControls: View {
-    @Binding var fontScale: Double
-    static func clamp(_ scale: Double) -> Double { min(3.0, max(0.6, (scale * 20).rounded() / 20)) }
-
-    var body: some View {
-        ControlGroup("Text Size") {
-            Button("Smaller Text", systemImage: "textformat.size.smaller") { fontScale = Self.clamp(fontScale - 0.1) }
-            // Shows the size; tapping it goes back to 100%.
-            Button("\(Int((fontScale * 100).rounded()))%") { fontScale = 1.0 }
-            Button("Larger Text", systemImage: "textformat.size.larger") { fontScale = Self.clamp(fontScale + 0.1) }
-        }
-        .controlGroupStyle(.compactMenu)
     }
 }
 

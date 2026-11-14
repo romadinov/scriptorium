@@ -105,13 +105,39 @@ struct MacReaderActions {
     let toggleAssistant: () -> Void
     let toggleSidebar: () -> Void
     let goToPage: () -> Void
+    let suggestImprovement: () -> Void
 }
 
 struct ReaderCommands: Commands {
     @FocusedValue(\.reader) private var reader
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("mac.fontScale") private var fontScale = 1.0
+    @AppStorage("readerTheme") private var theme: ReaderTheme = .system
 
     var body: some Commands {
+        CommandGroup(replacing: .printItem) {
+            Button("Print…") { reader.map { MacPrinting.print($0.model) } }
+                .keyboardShortcut("p")
+                .disabled(reader == nil)
+        }
+        CommandGroup(after: .toolbar) {
+            Group {
+                Button("Bigger Text") { fontScale = TextSize.clamp(fontScale + 0.1) }.keyboardShortcut("+")
+                Button("Smaller Text") { fontScale = TextSize.clamp(fontScale - 0.1) }.keyboardShortcut("-")
+                Button("Actual Size") { fontScale = 1.0 }.keyboardShortcut("0")
+            }
+            .disabled(reader?.model.reflowable == nil)
+            Picker("Theme", selection: $theme) {
+                ForEach(ReaderTheme.allCases) { Text($0.title).tag($0) }
+            }
+            Divider()
+        }
+        CommandGroup(after: .help) {
+            if DeveloperBuild.isDeveloper {
+                Button("Suggest an Improvement…") { reader?.suggestImprovement() }
+                    .disabled(reader == nil)
+            }
+        }
         CommandGroup(after: .pasteboard) {
             // A link to this page (or the selected highlight); the task app's Clip hotkey relies on ⌃⌘C.
             Button("Copy Link") { reader.map { TaskAppSender.copyLink($0.model) } }

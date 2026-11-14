@@ -150,6 +150,12 @@ final class ReaderModel {
     /// What the page views draw: the saved highlights plus the spoken sentence.
     var displayedHighlights: [Highlight] { spokenMark.map { highlights + [$0] } ?? highlights }
     var tappedHighlight: Highlight?
+    /// A picture tapped in a reflowable book (iPhone/iPad): shown full screen, zoomable.
+    var zoomedImage: URL?
+    #if os(macOS)
+    /// Prints what the reflowable view shows (set by ReflowableView on the Mac).
+    @ObservationIgnored var webPrintOperation: (@MainActor () -> NSPrintOperation?)?
+    #endif
     /// "Send to Uberdoer": the task being written before it's sent.
     var taskDraft: TaskAppSender.Draft?
     /// A newer position saved on another device, offered to the reader ("Continue on p. 120 from Mac?").

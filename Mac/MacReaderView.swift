@@ -85,6 +85,9 @@ struct MacReaderContent: View {
     @AppStorage("mac.reflowLayout") private var layout: ReflowLayout = .scroll
     @AppStorage("mac.fontScale") private var fontScale = 1.0
     @AppStorage("mac.twoPages") private var twoPages = false
+    @AppStorage("readerTheme") private var theme: ReaderTheme = .system
+    @State private var showAppearance = false
+    @State private var showImprovementNote = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
@@ -108,7 +111,10 @@ struct MacReaderContent: View {
             model: model,
             toggleAssistant: { showAssistant.toggle() },
             toggleSidebar: { columns = columns == .detailOnly ? .all : .detailOnly },
-            goToPage: { showGoTo = true }))
+            goToPage: { showGoTo = true },
+            suggestImprovement: { showImprovementNote = true }))
+        .preferredColorScheme(theme.colorScheme)
+        .sheet(isPresented: $showImprovementNote) { MacImprovementNote(context: noteContext, file: noteFile) }
         .sheet(item: $model.annotating) { target in
             MacAnnotationEditor(model: model, target: target)
         }
@@ -212,25 +218,29 @@ struct MacReaderContent: View {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if model.reflowable != nil {
-                Menu("Text", systemImage: "textformat.size") {
-                    if !(model.source is WebArchiveSource) {
-                        Picker("Layout", selection: $layout) {
-                            Text("Scroll").tag(ReflowLayout.scroll)
-                            Text("Pages").tag(ReflowLayout.paged)
+                Button("Text Size & Theme", systemImage: "textformat.size") { showAppearance.toggle() }
+                    .help("Text size, light or dark theme, layout")
+                    .popover(isPresented: $showAppearance, arrowEdge: .bottom) {
+                        ReaderAppearancePanel(fontScale: $fontScale, theme: $theme) {
+                            if !(model.source is WebArchiveSource) {
+                                Picker("Layout", selection: $layout) {
+                                    Text("Scroll").tag(ReflowLayout.scroll)
+                                    Text("Pages").tag(ReflowLayout.paged)
+                                }
+                                .pickerStyle(.segmented)
+                            }
+                            if model.isViewingAsText {
+                                Button("View Original Pages") { showAppearance = false; onViewAsText(false) }
+                            }
                         }
+                        .padding(18)
+                        .frame(width: 320)
                     }
-                    Button("Bigger") { fontScale = min(2.0, fontScale + 0.1) }.keyboardShortcut("+")
-                    Button("Smaller") { fontScale = max(0.7, fontScale - 0.1) }.keyboardShortcut("-")
-                    Button("Actual Size") { fontScale = 1.0 }.keyboardShortcut("0")
-                    if model.isViewingAsText {
-                        Divider()
-                        Button("View Original Pages") { onViewAsText(false) }
-                    }
-                }
             } else if model.pdfDocument != nil {
                 Menu("View", systemImage: "rectangle.split.2x1") {
                     Button("View as Text") { onViewAsText(true) }
                     Divider()
+                    themePicker
                     Toggle("Two Pages", isOn: $twoPages)
                     Toggle("Live Text Mode (for scans)", isOn: $model.imageMode)
                     Divider()
@@ -240,6 +250,8 @@ struct MacReaderContent: View {
             } else {
                 Menu("Text", systemImage: "text.viewfinder") {
                     if model.canViewAsText { Button("View as Text") { onViewAsText(true) }; Divider() }
+                    themePicker
+                    Divider()
                     Button("Recognize Text on This Page") { model.recognizeCurrentPage() }
                     Button("Recognize Whole Document") { model.recognizeDocument() }
                 }
@@ -273,7 +285,30 @@ struct MacReaderContent: View {
                 .help("Send this book to your iPad, iPhone or another Mac")
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
                 .help("Ask about the page or the selection (⌥⌘A)")
+            if DeveloperBuild.isDeveloper {
+                Button("Suggest an Improvement…", systemImage: "lightbulb") { model.pausePace(); showImprovementNote = true }
+                    .help("Note a bug or an idea for the app's developer")
+            }
         }
+    }
+
+    private var themePicker: some View {
+        Picker("Theme", selection: $theme) {
+            ForEach(ReaderTheme.allCases) { Text($0.title).tag($0) }
+        }
+    }
+
+    /// The open book's path in the library ("Physics/Thermodynamics.djvu"), so a note names the exact file.
+    private var noteFile: String {
+        let path = model.book.url.standardizedFileURL.path
+        let root = LibraryStore.rootURL.standardizedFileURL.path
+        return path.hasPrefix(root + "/") ? String(path.dropFirst(root.count + 1)) : model.book.url.lastPathComponent
+    }
+
+    /// Where a note was written: book, format, page and view mode (Mac).
+    private var noteContext: String {
+        let mode = model.reflowable != nil ? (layout == .paged ? "Pages" : "Scroll") : (model.imageMode ? "Live Text" : "Pages")
+        return "Mac reader › \(model.book.title) (\(model.book.format)), \(model.currentPosition.label), \(mode)"
     }
 
     private var pageLabel: String {

@@ -333,6 +333,7 @@
       document.documentElement.classList.toggle('scroll', opts.layout !== 'paged');
     }
     if (opts.total != null) total = opts.total;
+    if (opts.zoomImages != null) zoomImages = !!opts.zoomImages;
     if (opts.scale != null) {
       recordAnchor();
       document.documentElement.style.setProperty('--scale', String(opts.scale));
@@ -343,6 +344,7 @@
 
   // ---------- selection, links, taps ----------
 
+  let zoomImages = false;   // the iPhone/iPad reader shows tapped pictures full screen
   let selTimer = 0;
   document.addEventListener('selectionchange', () => {
     clearTimeout(selTimer);
@@ -376,8 +378,18 @@
       post({ type: 'tapHighlight', id: mark.dataset.hl });
       return;
     }
-    if (String(window.getSelection()) !== '' || !paged()) return;
     const x = e.clientX / window.innerWidth;
+    // A picture opens full screen (zoomable); in pages, the outer edges still turn the page.
+    const img = e.target.closest && e.target.closest('.rchap img, .rchap svg image');
+    if (img && zoomImages && String(window.getSelection()) === '' && (!paged() || (x >= 0.22 && x <= 0.78))) {
+      const src = img.currentSrc || img.src || (img.href && img.href.baseVal);
+      if (src) {
+        e.preventDefault();
+        post({ type: 'image', src: new URL(src, document.baseURI).href });
+        return;
+      }
+    }
+    if (String(window.getSelection()) !== '' || !paged()) return;
     if (x < 0.22) R.turnPage(-1);
     else if (x > 0.78) R.turnPage(1);
   }, true);

@@ -12,7 +12,7 @@ public final class ReflowedSource: ReflowableSource, @unchecked Sendable {
     public var chapterTitles: [String] { (0..<pageCount).map { "Page \($0 + 1)" } }
 
     /// Bumped when conversion improves, so pages converted by older code are converted again.
-    static let converterVersion = "2"
+    static let converterVersion = "3"
 
     public init(original: PageSource) {
         self.original = original

@@ -54,6 +54,8 @@ public enum PageReflower {
             case .formula(let r):
                 // Room above and below for limits, superscripts and subscripts that sit outside the text line.
                 try writePNG(crop(image, r.insetBy(dx: 0, dy: -layout.lineHeight * 0.6)), to: directory.appending(path: "\(stem)-\(i).png"))
+            case .code(let r):
+                try writePNG(crop(image, r.insetBy(dx: -0.01, dy: -layout.lineHeight * 0.4)), to: directory.appending(path: "\(stem)-\(i).png"))
             case .figure(let r):
                 try writePNG(crop(image, r), to: directory.appending(path: "\(stem)-\(i).png"))
             default: break
