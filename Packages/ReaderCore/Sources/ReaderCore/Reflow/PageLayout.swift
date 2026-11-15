@@ -476,7 +476,6 @@ public enum PageLayoutRules {
         .code img { max-width: 100%; object-fit: contain; object-position: left; }
         figure { margin: 1em 0; text-align: center; }
         figure img { max-width: 100%; height: auto; }
-        @media (prefers-color-scheme: dark) { .formula img, .code img, figure img { filter: invert(1) hue-rotate(180deg); } }
         </style></head>
         <body>
         \(body)</body></html>

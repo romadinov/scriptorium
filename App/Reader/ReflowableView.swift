@@ -485,6 +485,10 @@ extension ReflowableView {
           .rchap, .rchap *:not(mark):not(img):not(svg):not(svg *) { color: var(--fg) !important;
             background-color: transparent !important; border-color: rgba(233, 229, 220, 0.25) !important; }
           html .rchap a[href], html .rchap a[href] *:not(img) { color: var(--link) !important; }
+          /* Pictures stay as printed, on white: dark line art and transparent images vanish on a dark page,
+             and inverted ones are hard to read. (Overrides the invert in pages converted by View as Text.) */
+          .rchap img, .rchap svg { background-color: #fff !important; filter: none !important;
+                                   padding: 4px; border-radius: 4px; box-sizing: border-box; }
         }
         @media (max-width: 560px) { :root { --ph: 20px; --pv: 22px; --pb: calc(var(--pv) + 36px); } html { font-size: calc(18px * var(--scale)) !important; }
                                     html.scroll .rchap { padding: 18px 18px 8px; } }

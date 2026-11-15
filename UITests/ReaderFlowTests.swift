@@ -837,6 +837,7 @@ final class ReaderFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Text Size & Theme…"].waitForExistence(timeout: 5), "No Text Size & Theme… for a PDF")
         app.buttons["Text Size & Theme…"].tap()
         XCTAssertTrue(app.buttons["Dark"].waitForExistence(timeout: 5))
+        app.buttons["Dark"].tap()   // pictures must stay readable (on white) in the dark theme
         snap("zoom-0-pdf-panel")
         app.buttons["View as Text"].tap()
         let picture = app.webViews.images.firstMatch
@@ -854,6 +855,10 @@ final class ReaderFlowTests: XCTestCase {
         app.buttons["Text Size & Theme…"].tap()
         XCTAssertTrue(app.buttons["View Original Pages"].waitForExistence(timeout: 5))
         app.buttons["View Original Pages"].tap()
+        app.buttons["More"].tap()
+        app.buttons["Text Size & Theme…"].tap()
+        XCTAssertTrue(app.buttons["Auto"].waitForExistence(timeout: 5))
+        app.buttons["Auto"].tap()
     }
 
     /// A link with a quote lands on the passage and selects it. The links (with the seeded books' fingerprints)

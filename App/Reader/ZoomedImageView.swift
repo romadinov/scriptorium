@@ -30,7 +30,8 @@ struct ZoomedImageView: View {
             let url = url
             image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
                 guard let data = try? Data(contentsOf: url) else { return nil }
-                return UIImage(data: data)?.preparingForDisplay()
+                guard let image = UIImage(data: data) else { return nil }
+                return image.preparingForDisplay() ?? image
             }.value
             if image == nil { onClose() }   // SVG or unreadable: nothing to show
         }
@@ -94,6 +95,8 @@ final class ZoomScrollView: UIScrollView {
         imageView = UIImageView(image: image)
         super.init(frame: .zero)
         imageView.contentMode = .scaleAspectFit
+        // On white, like the page: line art and transparent pictures would vanish on black.
+        imageView.backgroundColor = .white
         addSubview(imageView)
         showsHorizontalScrollIndicator = false
         showsVerticalScrollIndicator = false
