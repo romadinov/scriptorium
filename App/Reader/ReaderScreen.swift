@@ -167,7 +167,6 @@ private struct ReaderContent: View {
         .animation(.snappy, value: model.remotePosition)
         .onChange(of: showAssistant) { _, open in if open { model.pausePace() } }   // asking isn't reading
         .onChange(of: model.readingPageNumber) {
-            model.noteReadingPosition()
             model.notePageTurn()
         }
         .onChange(of: transfers.status) { _, status in if let status { model.statusMessage = status } }

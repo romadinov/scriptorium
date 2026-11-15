@@ -198,7 +198,6 @@ struct MacReaderContent: View {
         }
         .padding(.top, 10)
         .onChange(of: model.readingPageNumber) {
-            model.noteReadingPosition()
             model.notePageTurn()
         }
     }

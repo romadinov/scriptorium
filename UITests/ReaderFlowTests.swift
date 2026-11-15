@@ -419,7 +419,7 @@ final class ReaderFlowTests: XCTestCase {
         let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
         XCTAssertTrue(indicator.waitForExistence(timeout: 10))
         sleep(2)
-        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.13)).tap()
+        app.links["Go to section 3"].tap()
         let appeared = back.waitForExistence(timeout: 5)
         sleep(1)
         snap("back-2-pdf-link")
@@ -428,6 +428,48 @@ final class ReaderFlowTests: XCTestCase {
         back.tap()
         sleep(1)
         XCTAssertEqual(indicator.label, "Page 1 of 3")
+    }
+
+    /// iPhone, pages swiped sideways: a PDF link and Back, also after turning a page at the target.
+    func testIPhoneBackAfterPDFLinkHorizontal() throws {
+        openFolder("Physics")
+        open(bookMatching: "Linked")
+        let indicator = app.buttons.matching(NSPredicate(format: "label MATCHES 'Page [0-9]+ of [0-9]+'")).firstMatch
+        XCTAssertTrue(indicator.waitForExistence(timeout: 10))
+        sleep(2)
+        app.links["Go to section 3"].tap()
+        let back = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Back to'")).firstMatch
+        let appeared = back.waitForExistence(timeout: 5)
+        sleep(1)
+        snap("hback-1-after-link")
+        XCTAssertTrue(appeared, "No Back button after a PDF link (horizontal pages)")
+        XCTAssertEqual(indicator.label, "Page 3 of 3")
+        // A second link from the target page: Back goes one step at a time.
+        app.links["Go to section 2"].tap()
+        sleep(1)
+        snap("hback-2-second-link")
+        XCTAssertEqual(indicator.label, "Page 2 of 3")
+        XCTAssertTrue(back.exists, "Back disappeared after a second link")
+        back.tap()
+        sleep(1)
+        XCTAssertEqual(indicator.label, "Page 3 of 3")
+        back.tap()
+        sleep(1)
+        snap("hback-3-back-home")
+        XCTAssertEqual(indicator.label, "Page 1 of 3")
+        // Back stays while reading on from where the link landed (pages 3 → 2 → 1 → 2).
+        app.links["Go to section 3"].tap()
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        app.swipeRight(); sleep(1)
+        app.swipeRight(); sleep(1)
+        app.swipeLeft(); sleep(1)
+        XCTAssertEqual(indicator.label, "Page 2 of 3")
+        XCTAssertTrue(back.exists, "Back was dropped after reading on")
+        snap("hback-4-after-reading-on")
+        back.tap()
+        sleep(1)
+        XCTAssertEqual(indicator.label, "Page 1 of 3")
+        XCTAssertFalse(back.exists)
     }
 
     func testReadLaterFromLongPressedLink() throws {
