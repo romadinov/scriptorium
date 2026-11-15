@@ -832,8 +832,12 @@ final class ReaderFlowTests: XCTestCase {
         open(bookMatching: "Thermodynamics, PDF")
         XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15))
         sleep(1)
+        // The panel is there for page books too: theme, and View as Text for a text size.
         app.buttons["More"].tap()
-        XCTAssertTrue(app.buttons["View as Text"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Text Size & Theme…"].waitForExistence(timeout: 5), "No Text Size & Theme… for a PDF")
+        app.buttons["Text Size & Theme…"].tap()
+        XCTAssertTrue(app.buttons["Dark"].waitForExistence(timeout: 5))
+        snap("zoom-0-pdf-panel")
         app.buttons["View as Text"].tap()
         let picture = app.webViews.images.firstMatch
         XCTAssertTrue(picture.waitForExistence(timeout: 40), "No picture in the converted text")

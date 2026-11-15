@@ -179,7 +179,7 @@ private struct ReaderContent: View {
         }
         .preferredColorScheme(theme.colorScheme)
         .sheet(isPresented: compactOnly($showAppearance)) {
-            appearancePanel.padding(20).presentationDetents([.height(model.reflowable != nil ? 330 : 140)])
+            appearancePanel.padding(20).presentationDetents([.height(model.reflowable != nil ? 330 : (model.canViewAsText ? 230 : 150))])
         }
         .fullScreenCover(isPresented: Binding(get: { model.zoomedImage != nil }, set: { if !$0 { model.zoomedImage = nil } })) {
             if let url = model.zoomedImage { ZoomedImageView(url: url) { model.zoomedImage = nil } }
@@ -417,6 +417,8 @@ private struct ReaderContent: View {
             }
             Button("Assistant", systemImage: "sparkles") { showAssistant.toggle() }
             Menu("More", systemImage: "ellipsis.circle") {
+                // First, for every kind of book: PDFs and DjVu get the theme here and View as Text for a text size.
+                Button("Text Size & Theme…", systemImage: "textformat.size") { showAppearance = true }
                 Button(model.readAloud.state == .idle ? "Read aloud" : "Stop reading aloud",
                        systemImage: model.readAloud.state == .idle ? "speaker.wave.2" : "speaker.slash") {
                     if model.readAloud.state == .idle { model.readAloud.start(model) } else { model.readAloud.stop() }
@@ -438,14 +440,9 @@ private struct ReaderContent: View {
                             .disabled(model.currentPage >= model.source.pageCount - 1)
                     }
                 }
-                if model.reflowable != nil {
-                    Button("Text Size & Theme…", systemImage: "textformat.size") { showAppearance = true }
-                } else {
+                if model.reflowable == nil {
                     Picker("Page turning", selection: $turning) {
                         ForEach(PageTurning.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
-                    }
-                    Picker("Theme", selection: $theme) {
-                        ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                     }
                     Section("Text recognition") {
                         if model.canViewAsText {
@@ -477,6 +474,12 @@ private struct ReaderContent: View {
             }
             if model.isViewingAsText {
                 Button("View Original Pages", systemImage: "doc.richtext") { showAppearance = false; onViewAsText(false) }
+            } else if model.reflowable == nil && model.canViewAsText {
+                // Printed pages have no text size of their own; as text they do.
+                VStack(alignment: .leading, spacing: 4) {
+                    Button("View as Text", systemImage: "text.justify.left") { showAppearance = false; onViewAsText(true) }
+                    Text("To change the text size, read this book as text.").font(.footnote).foregroundStyle(.secondary)
+                }
             }
         }
     }
